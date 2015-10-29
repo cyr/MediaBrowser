@@ -31,13 +31,11 @@ namespace MediaBrowser.Controller.Entities
         DateTime DateLastSaved { get; set; }
 
         /// <summary>
-        /// Updates to repository.
+        /// Gets or sets the date last refreshed.
         /// </summary>
-        /// <param name="updateReason">The update reason.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
-        Task UpdateToRepository(ItemUpdateType updateReason, CancellationToken cancellationToken);
-
+        /// <value>The date last refreshed.</value>
+        DateTime DateLastRefreshed { get; set; }
+        
         /// <summary>
         /// This is called before any metadata refresh and returns true or false indicating if changes were made
         /// </summary>
@@ -45,19 +43,14 @@ namespace MediaBrowser.Controller.Entities
         bool BeforeMetadataRefresh();
 
         /// <summary>
-        /// Gets or sets a value indicating whether this instance is unidentified.
-        /// </summary>
-        /// <value><c>true</c> if this instance is unidentified; otherwise, <c>false</c>.</value>
-        bool IsUnidentified { get; set; }
-
-        /// <summary>
-        /// Gets the item identities.
-        /// </summary>
-        List<IItemIdentity> Identities { get; set; }
-
-        /// <summary>
         /// Afters the metadata refresh.
         /// </summary>
         void AfterMetadataRefresh();
+
+        /// <summary>
+        /// Gets a value indicating whether [supports people].
+        /// </summary>
+        /// <value><c>true</c> if [supports people]; otherwise, <c>false</c>.</value>
+        bool SupportsPeople { get; }
     }
 }

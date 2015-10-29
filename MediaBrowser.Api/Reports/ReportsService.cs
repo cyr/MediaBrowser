@@ -1,64 +1,688 @@
-﻿using MediaBrowser.Controller.Entities;
+﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Querying;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Globalization;
+using System.Linq;
+using MediaBrowser.Model.Dto;
+using MediaBrowser.Controller.Localization;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Api.UserLibrary;
+using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Entities.TV;
+using System;
+using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Controller.Net;
+using MediaBrowser.Model.Activity;
+using MediaBrowser.Controller.Activity;
+using System.IO;
+using System.Text;
 
 namespace MediaBrowser.Api.Reports
 {
+    /// <summary> The reports service. </summary>
+    /// <seealso cref="T:MediaBrowser.Api.BaseApiService"/>
     public class ReportsService : BaseApiService
     {
-        private readonly ILibraryManager _libraryManager;
+        #region [Constructors]
 
-        public ReportsService(ILibraryManager libraryManager)
+        /// <summary>
+        /// Initializes a new instance of the MediaBrowser.Api.Reports.ReportsService class. </summary>
+        /// <param name="userManager"> Manager for user. </param>
+        /// <param name="libraryManager"> Manager for library. </param>
+        /// <param name="localization"> The localization. </param>
+        /// <param name="activityManager"> Manager for activity. </param>
+        public ReportsService(IUserManager userManager, ILibraryManager libraryManager, ILocalizationManager localization, IActivityManager activityManager, IActivityRepository repo)
         {
+            _userManager = userManager;
             _libraryManager = libraryManager;
+            _localization = localization;
+            _activityManager = activityManager;
+            _repo = repo;
         }
 
+        #endregion
+
+        #region [Private Fields]
+
+        private readonly IActivityManager _activityManager; ///< Manager for activity
+
+        /// <summary> Manager for library. </summary>
+        private readonly ILibraryManager _libraryManager;   ///< Manager for library
+        /// <summary> The localization. </summary>
+
+        private readonly ILocalizationManager _localization;    ///< The localization
+
+        private readonly IActivityRepository _repo;
+
+        /// <summary> Manager for user. </summary>
+        private readonly IUserManager _userManager; ///< Manager for user
+
+        #endregion
+
+        #region [Public Methods]
+
+        /// <summary> Gets the given request. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> A Task&lt;object&gt; </returns>
+        public async Task<object> Get(GetActivityLogs request)
+        {
+            request.DisplayType = "Screen";
+            ReportResult result = await GetReportActivities(request).ConfigureAwait(false);
+            return ToOptimizedResult(result);
+        }
+
+        /// <summary> Gets the given request. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> A Task&lt;object&gt; </returns>
+        public async Task<object> Get(GetReportHeaders request)
+        {
+            if (string.IsNullOrEmpty(request.IncludeItemTypes))
+                return null;
+
+            request.DisplayType = "Screen";
+            ReportViewType reportViewType = ReportHelper.GetReportViewType(request.ReportView);
+
+            List<ReportHeader> result = new List<ReportHeader>();
+            switch (reportViewType)
+            {
+                case ReportViewType.ReportData:
+                    ReportBuilder dataBuilder = new ReportBuilder(_libraryManager);
+                    result = dataBuilder.GetHeaders(request);
+                    break;
+                case ReportViewType.ReportStatistics:
+                    break;
+                case ReportViewType.ReportActivities:
+                    ReportActivitiesBuilder activityBuilder = new ReportActivitiesBuilder(_libraryManager, _userManager);
+                    result = activityBuilder.GetHeaders(request);
+                    break;
+            }
+
+            return ToOptimizedResult(result);
+
+        }
+
+        /// <summary> Gets the given request. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> A Task&lt;object&gt; </returns>
         public async Task<object> Get(GetItemReport request)
         {
-            var queryResult = await GetQueryResult(request).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(request.IncludeItemTypes))
+                return null;
 
-            var reportResult = GetReportResult(queryResult);
+            request.DisplayType = "Screen";
+            var reportResult = await GetReportResult(request);
 
             return ToOptimizedResult(reportResult);
         }
 
-        private ReportResult GetReportResult(QueryResult<BaseItem> queryResult)
+        /// <summary> Gets the given request. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> A Task&lt;object&gt; </returns>
+        public async Task<object> Get(GetReportStatistics request)
         {
-            var reportResult = new ReportResult();
+            if (string.IsNullOrEmpty(request.IncludeItemTypes))
+                return null;
+            request.DisplayType = "Screen";
+            var reportResult = await GetReportStatistic(request);
 
-            // Fill rows and columns
-
-            return reportResult;
+            return ToOptimizedResult(reportResult);
         }
 
-        private Task<QueryResult<BaseItem>> GetQueryResult(BaseReportRequest request)
+        /// <summary> Gets the given request. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> A Task&lt;object&gt; </returns>
+        public async Task<object> Get(GetReportDownload request)
         {
-            // Placeholder in case needed later
-            User user = null;
+            if (string.IsNullOrEmpty(request.IncludeItemTypes))
+                return null;
 
-            var parentItem = string.IsNullOrEmpty(request.ParentId) ?
-                (user == null ? _libraryManager.RootFolder : user.RootFolder) :
-                _libraryManager.GetItemById(request.ParentId);
+            request.DisplayType = "Export";
+            ReportViewType reportViewType = ReportHelper.GetReportViewType(request.ReportView);
+            var headers = new Dictionary<string, string>();
+            string fileExtension = "csv";
+            string contentType = "text/plain;charset='utf-8'";
 
-            return ((Folder)parentItem).GetItems(GetItemsQuery(request, user));
+            switch (request.ExportType)
+            {
+                case ReportExportType.CSV:
+                    break;
+                case ReportExportType.Excel:
+                    contentType = "application/vnd.ms-excel";
+                    fileExtension = "xls";
+                    break;
+            }
+
+            var filename = "ReportExport." + fileExtension;
+            headers["Content-Disposition"] = string.Format("attachment; filename=\"{0}\"", filename);
+            headers["Content-Encoding"] = "UTF-8";
+
+            ReportResult result = null;
+            switch (reportViewType)
+            {
+                case ReportViewType.ReportStatistics:
+                case ReportViewType.ReportData:
+                    ReportIncludeItemTypes reportRowType = ReportHelper.GetRowType(request.IncludeItemTypes);
+                    ReportBuilder dataBuilder = new ReportBuilder(_libraryManager);
+                    QueryResult<BaseItem> queryResult = await GetQueryResult(request).ConfigureAwait(false);
+                    result = dataBuilder.GetResult(queryResult.Items, request);
+                    result.TotalRecordCount = queryResult.TotalRecordCount;
+                    break;
+                case ReportViewType.ReportActivities:
+                    result = await GetReportActivities(request).ConfigureAwait(false);
+                    break;
+            }
+
+            string returnResult = string.Empty;
+            switch (request.ExportType)
+            {
+                case ReportExportType.CSV:
+                    returnResult = new ReportExport().ExportToCsv(result);
+                    break;
+                case ReportExportType.Excel:
+                    returnResult = new ReportExport().ExportToExcel(result);
+                    break;
+            }
+
+            object ro = ResultFactory.GetResult(returnResult, contentType, headers);
+            return ro;
         }
 
+        #endregion
+
+        #region [Private Methods]
+
+        /// <summary> Gets items query. </summary>
+        /// <param name="request"> The request. </param>
+        /// <param name="user"> The user. </param>
+        /// <returns> The items query. </returns>
         private InternalItemsQuery GetItemsQuery(BaseReportRequest request, User user)
         {
             var query = new InternalItemsQuery
             {
                 User = user,
-                CollapseBoxSetItems = false
+                IsPlayed = request.IsPlayed,
+                MediaTypes = request.GetMediaTypes(),
+                IncludeItemTypes = request.GetIncludeItemTypes(),
+                ExcludeItemTypes = request.GetExcludeItemTypes(),
+                Recursive = request.Recursive,
+                SortBy = request.GetOrderBy(),
+                SortOrder = request.SortOrder ?? SortOrder.Ascending,
+
+                Filter = i => ApplyAdditionalFilters(request, i, user, _libraryManager),
+
+                Limit = request.Limit,
+                StartIndex = request.StartIndex,
+                IsMissing = request.IsMissing,
+                IsVirtualUnaired = request.IsVirtualUnaired,
+                IsUnaired = request.IsUnaired,
+                CollapseBoxSetItems = request.CollapseBoxSetItems,
+                NameLessThan = request.NameLessThan,
+                NameStartsWith = request.NameStartsWith,
+                NameStartsWithOrGreater = request.NameStartsWithOrGreater,
+                HasImdbId = request.HasImdbId,
+                IsYearMismatched = request.IsYearMismatched,
+                IsPlaceHolder = request.IsPlaceHolder,
+                IsLocked = request.IsLocked,
+                IsInBoxSet = request.IsInBoxSet,
+                IsHD = request.IsHD,
+                Is3D = request.Is3D,
+                HasTvdbId = request.HasTvdbId,
+                HasTmdbId = request.HasTmdbId,
+                HasOverview = request.HasOverview,
+                HasOfficialRating = request.HasOfficialRating,
+                HasParentalRating = request.HasParentalRating,
+                HasSpecialFeature = request.HasSpecialFeature,
+                HasSubtitles = request.HasSubtitles,
+                HasThemeSong = request.HasThemeSong,
+                HasThemeVideo = request.HasThemeVideo,
+                HasTrailer = request.HasTrailer,
+                Tags = request.GetTags(),
+                OfficialRatings = request.GetOfficialRatings(),
+                Genres = request.GetGenres(),
+                Studios = request.GetStudios(),
+                StudioIds = request.GetStudioIds(),
+                Person = request.Person,
+                PersonIds = request.GetPersonIds(),
+                PersonTypes = request.GetPersonTypes(),
+                Years = request.GetYears(),
+                ImageTypes = request.GetImageTypes().ToArray(),
+                VideoTypes = request.GetVideoTypes().ToArray(),
+                AdjacentTo = request.AdjacentTo,
+                ItemIds = request.GetItemIds(),
+                MinPlayers = request.MinPlayers,
+                MaxPlayers = request.MaxPlayers,
+                MinCommunityRating = request.MinCommunityRating,
+                MinCriticRating = request.MinCriticRating
             };
 
-            // Set query values based on request
+            if (!string.IsNullOrWhiteSpace(request.Ids))
+            {
+                query.CollapseBoxSetItems = false;
+            }
 
-            // Example
-            //query.IncludeItemTypes = new[] {"Movie"};
+            foreach (var filter in request.GetFilters())
+            {
+                switch (filter)
+                {
+                    case ItemFilter.Dislikes:
+                        query.IsLiked = false;
+                        break;
+                    case ItemFilter.IsFavorite:
+                        query.IsFavorite = true;
+                        break;
+                    case ItemFilter.IsFavoriteOrLikes:
+                        query.IsFavoriteOrLiked = true;
+                        break;
+                    case ItemFilter.IsFolder:
+                        query.IsFolder = true;
+                        break;
+                    case ItemFilter.IsNotFolder:
+                        query.IsFolder = false;
+                        break;
+                    case ItemFilter.IsPlayed:
+                        query.IsPlayed = true;
+                        break;
+                    case ItemFilter.IsRecentlyAdded:
+                        break;
+                    case ItemFilter.IsResumable:
+                        query.IsResumable = true;
+                        break;
+                    case ItemFilter.IsUnplayed:
+                        query.IsPlayed = false;
+                        break;
+                    case ItemFilter.Likes:
+                        query.IsLiked = true;
+                        break;
+                }
+            }
 
+            if (request.HasQueryLimit)
+                query.Limit = request.Limit;
 
             return query;
         }
+
+        private bool ApplyAdditionalFilters(BaseReportRequest request, BaseItem i, User user, ILibraryManager libraryManager)
+        {
+            // Artists
+            if (!string.IsNullOrEmpty(request.ArtistIds))
+            {
+                var artistIds = request.ArtistIds.Split(new[] { '|', ',' });
+
+                var audio = i as IHasArtist;
+
+                if (!(audio != null && artistIds.Any(id =>
+                {
+                    var artistItem = libraryManager.GetItemById(id);
+                    return artistItem != null && audio.HasAnyArtist(artistItem.Name);
+                })))
+                {
+                    return false;
+                }
+            }
+
+            // Artists
+            if (!string.IsNullOrEmpty(request.Artists))
+            {
+                var artists = request.Artists.Split('|');
+
+                var audio = i as IHasArtist;
+
+                if (!(audio != null && artists.Any(audio.HasAnyArtist)))
+                {
+                    return false;
+                }
+            }
+
+            // Albums
+            if (!string.IsNullOrEmpty(request.Albums))
+            {
+                var albums = request.Albums.Split('|');
+
+                var audio = i as Audio;
+
+                if (audio != null)
+                {
+                    if (!albums.Any(a => string.Equals(a, audio.Album, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return false;
+                    }
+                }
+
+                var album = i as MusicAlbum;
+
+                if (album != null)
+                {
+                    if (!albums.Any(a => string.Equals(a, album.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return false;
+                    }
+                }
+
+                var musicVideo = i as MusicVideo;
+
+                if (musicVideo != null)
+                {
+                    if (!albums.Any(a => string.Equals(a, musicVideo.Album, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return false;
+                    }
+                }
+
+                return false;
+            }
+
+            // Min index number
+            if (request.MinIndexNumber.HasValue)
+            {
+                if (!(i.IndexNumber.HasValue && i.IndexNumber.Value >= request.MinIndexNumber.Value))
+                {
+                    return false;
+                }
+            }
+
+            // Min official rating
+            if (!string.IsNullOrEmpty(request.MinOfficialRating))
+            {
+                var level = _localization.GetRatingLevel(request.MinOfficialRating);
+
+                if (level.HasValue)
+                {
+                    var rating = i.CustomRating;
+
+                    if (string.IsNullOrEmpty(rating))
+                    {
+                        rating = i.OfficialRating;
+                    }
+
+                    if (!string.IsNullOrEmpty(rating))
+                    {
+                        var itemLevel = _localization.GetRatingLevel(rating);
+
+                        if (!(!itemLevel.HasValue || itemLevel.Value >= level.Value))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            // Max official rating
+            if (!string.IsNullOrEmpty(request.MaxOfficialRating))
+            {
+                var level = _localization.GetRatingLevel(request.MaxOfficialRating);
+
+                if (level.HasValue)
+                {
+                    var rating = i.CustomRating;
+
+                    if (string.IsNullOrEmpty(rating))
+                    {
+                        rating = i.OfficialRating;
+                    }
+
+                    if (!string.IsNullOrEmpty(rating))
+                    {
+                        var itemLevel = _localization.GetRatingLevel(rating);
+
+                        if (!(!itemLevel.HasValue || itemLevel.Value <= level.Value))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            // LocationTypes
+            if (!string.IsNullOrEmpty(request.LocationTypes))
+            {
+                var vals = request.LocationTypes.Split(',');
+                if (!vals.Contains(i.LocationType.ToString(), StringComparer.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            // ExcludeLocationTypes
+            if (!string.IsNullOrEmpty(request.ExcludeLocationTypes))
+            {
+                var vals = request.ExcludeLocationTypes.Split(',');
+                if (vals.Contains(i.LocationType.ToString(), StringComparer.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request.AlbumArtistStartsWithOrGreater))
+            {
+                var ok = new[] { i }.OfType<IHasAlbumArtist>()
+                    .Any(p => string.Compare(request.AlbumArtistStartsWithOrGreater, p.AlbumArtists.FirstOrDefault(), StringComparison.CurrentCultureIgnoreCase) < 1);
+
+                if (!ok)
+                {
+                    return false;
+                }
+            }
+
+            // Filter by Series Status
+            if (!string.IsNullOrEmpty(request.SeriesStatus))
+            {
+                var vals = request.SeriesStatus.Split(',');
+
+                var ok = new[] { i }.OfType<Series>().Any(p => p.Status.HasValue && vals.Contains(p.Status.Value.ToString(), StringComparer.OrdinalIgnoreCase));
+
+                if (!ok)
+                {
+                    return false;
+                }
+            }
+
+            // Filter by Series AirDays
+            if (!string.IsNullOrEmpty(request.AirDays))
+            {
+                var days = request.AirDays.Split(',').Select(d => (DayOfWeek)Enum.Parse(typeof(DayOfWeek), d, true));
+
+                var ok = new[] { i }.OfType<Series>().Any(p => p.AirDays != null && days.Any(d => p.AirDays.Contains(d)));
+
+                if (!ok)
+                {
+                    return false;
+                }
+            }
+
+            if (request.ParentIndexNumber.HasValue)
+            {
+                var filterValue = request.ParentIndexNumber.Value;
+
+                var episode = i as Episode;
+
+                if (episode != null)
+                {
+                    if (episode.ParentIndexNumber.HasValue && episode.ParentIndexNumber.Value != filterValue)
+                    {
+                        return false;
+                    }
+                }
+
+                var song = i as Audio;
+
+                if (song != null)
+                {
+                    if (song.ParentIndexNumber.HasValue && song.ParentIndexNumber.Value != filterValue)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            if (request.AiredDuringSeason.HasValue)
+            {
+                var episode = i as Episode;
+
+                if (episode == null)
+                {
+                    return false;
+                }
+
+                if (!Series.FilterEpisodesBySeason(new[] { episode }, request.AiredDuringSeason.Value, true).Any())
+                {
+                    return false;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request.MinPremiereDate))
+            {
+                var date = DateTime.Parse(request.MinPremiereDate, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+
+                if (!(i.PremiereDate.HasValue && i.PremiereDate.Value >= date))
+                {
+                    return false;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request.MaxPremiereDate))
+            {
+                var date = DateTime.Parse(request.MaxPremiereDate, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+
+                if (!(i.PremiereDate.HasValue && i.PremiereDate.Value <= date))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary> Applies the paging. </summary>
+        /// <param name="request"> The request. </param>
+        /// <param name="items"> The items. </param>
+        /// <returns> IEnumerable{BaseItem}. </returns>
+        private IEnumerable<BaseItem> ApplyPaging(BaseReportRequest request, IEnumerable<BaseItem> items)
+        {
+            // Start at
+            if (request.StartIndex.HasValue)
+            {
+                items = items.Skip(request.StartIndex.Value);
+            }
+
+            // Return limit
+            if (request.Limit.HasValue)
+            {
+                items = items.Take(request.Limit.Value);
+            }
+
+            return items;
+        }
+
+        /// <summary> Gets query result. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> The query result. </returns>
+        private async Task<QueryResult<BaseItem>> GetQueryResult(BaseReportRequest request)
+        {
+            // Placeholder in case needed later
+            request.Recursive = true;
+            var user = !string.IsNullOrWhiteSpace(request.UserId) ? _userManager.GetUserById(request.UserId) : null;
+            request.Fields = "MediaSources,DateCreated,Settings,Studios,SyncInfo,ItemCounts";
+
+            var parentItem = string.IsNullOrEmpty(request.ParentId) ?
+                (user == null ? _libraryManager.RootFolder : user.RootFolder) :
+                _libraryManager.GetItemById(request.ParentId);
+
+            var item = string.IsNullOrEmpty(request.ParentId) ?
+                user == null ? _libraryManager.RootFolder : user.RootFolder :
+                parentItem;
+
+            IEnumerable<BaseItem> items;
+
+            if (request.Recursive)
+            {
+                var result = await ((Folder)item).GetItems(GetItemsQuery(request, user)).ConfigureAwait(false);
+                return result;
+            }
+            else
+            {
+                if (user == null)
+                {
+                    var result = await ((Folder)item).GetItems(GetItemsQuery(request, null)).ConfigureAwait(false);
+                    return result;
+                }
+
+                var userRoot = item as UserRootFolder;
+
+                if (userRoot == null)
+                {
+                    var result = await ((Folder)item).GetItems(GetItemsQuery(request, user)).ConfigureAwait(false);
+
+                    return result;
+                }
+
+                items = ((Folder)item).GetChildren(user, true);
+            }
+
+            return new QueryResult<BaseItem> { Items = items.ToArray() };
+
+        }
+
+        /// <summary> Gets report activities. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> The report activities. </returns>
+        private Task<ReportResult> GetReportActivities(IReportsDownload request)
+        {
+            return Task<ReportResult>.Run(() =>
+            {
+                DateTime? minDate = string.IsNullOrWhiteSpace(request.MinDate) ?
+                (DateTime?)null :
+                DateTime.Parse(request.MinDate, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+
+                QueryResult<ActivityLogEntry> queryResult;
+                 if (request.HasQueryLimit)   
+                   queryResult = _repo.GetActivityLogEntries(minDate, request.StartIndex, request.Limit);
+                 else
+                     queryResult = _repo.GetActivityLogEntries(minDate, request.StartIndex, null);
+                //var queryResult = _activityManager.GetActivityLogEntries(minDate, request.StartIndex, request.Limit);
+
+                ReportActivitiesBuilder builder = new ReportActivitiesBuilder(_libraryManager, _userManager);
+                var result = builder.GetResult(queryResult, request);
+                result.TotalRecordCount = queryResult.TotalRecordCount;
+                return result;
+
+            });
+
+        }
+
+        /// <summary> Gets report result. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> The report result. </returns>
+        private async Task<ReportResult> GetReportResult(GetItemReport request)
+        {
+            ReportBuilder reportBuilder = new ReportBuilder(_libraryManager);
+            QueryResult<BaseItem> queryResult = await GetQueryResult(request).ConfigureAwait(false);
+            ReportResult reportResult = reportBuilder.GetResult(queryResult.Items, request);
+            reportResult.TotalRecordCount = queryResult.TotalRecordCount;
+
+            return reportResult;
+        }
+
+        /// <summary> Gets report statistic. </summary>
+        /// <param name="request"> The request. </param>
+        /// <returns> The report statistic. </returns>
+        private async Task<ReportStatResult> GetReportStatistic(GetReportStatistics request)
+        {
+            ReportIncludeItemTypes reportRowType = ReportHelper.GetRowType(request.IncludeItemTypes);
+            QueryResult<BaseItem> queryResult = await GetQueryResult(request).ConfigureAwait(false);
+
+            ReportStatBuilder reportBuilder = new ReportStatBuilder(_libraryManager);
+            ReportStatResult reportResult = reportBuilder.GetResult(queryResult.Items, ReportHelper.GetRowType(request.IncludeItemTypes), request.TopItems ?? 5);
+            reportResult.TotalRecordCount = reportResult.Groups.Count();
+            return reportResult;
+        }
+
+        #endregion
+
     }
 }

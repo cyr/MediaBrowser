@@ -1,134 +1,147 @@
 ﻿(function ($, document) {
 
-    var query = {
+    var data = {};
 
-        StartIndex: 0,
-        EnableFavoriteSorting: true
-    };
+    function getPageData() {
+        var key = getSavedQueryKey();
+        var pageData = data[key];
+
+        if (!pageData) {
+            pageData = data[key] = {
+                query: {
+                    StartIndex: 0,
+                    EnableFavoriteSorting: true,
+                    Limit: LibraryBrowser.getDefaultPageSize()
+                }
+            };
+
+            LibraryBrowser.loadSavedQueryValues(key, pageData.query);
+        }
+        return pageData;
+    }
+
+    function getQuery() {
+
+        return getPageData().query;
+    }
+
+    function getSavedQueryKey() {
+
+        return LibraryBrowser.getSavedQueryKey('channels');
+    }
 
     function getChannelsHtml(channels) {
 
-        return LibraryBrowser.getPosterViewHtml({
+        return LibraryBrowser.getListViewHtml({
             items: channels,
-            shape: "smallBackdrop",
-            centerText: true
+            smallIcon: true
         });
     }
 
-    function showLoadingMessage(page) {
+    function renderChannels(page, viewPanel, result) {
 
-        $('.popupLoading', page).popup('open');
-    }
-
-    function hideLoadingMessage(page) {
-        $('.popupLoading', page).popup('close');
-    }
-
-    function renderChannels(page, result) {
+        var query = getQuery();
 
         $('.listTopPaging', page).html(LibraryBrowser.getQueryPagingHtml({
             startIndex: query.StartIndex,
             limit: query.Limit,
             totalRecordCount: result.TotalRecordCount,
             viewButton: true,
-            showLimit: false
-        })).trigger('create');
+            showLimit: false,
+            viewPanelClass: 'channelViewPanel',
+            updatePageSizeSetting: false,
+            viewIcon: 'filter-list'
 
-        updateFilterControls(this);
+        }));
+
+        updateFilterControls(viewPanel);
 
         var html = getChannelsHtml(result.Items);
 
-        $('#items', page).html(html).lazyChildren();
+        var elem = page.querySelector('#items');
+        elem.innerHTML = html;
+        ImageLoader.lazyChildren(elem);
 
         $('.btnNextPage', page).on('click', function () {
             query.StartIndex += query.Limit;
-            reloadItems(page);
+            reloadItems(page, viewPanel);
         });
 
         $('.btnPreviousPage', page).on('click', function () {
             query.StartIndex -= query.Limit;
-            reloadItems(page);
+            reloadItems(page, viewPanel);
         });
 
-        LibraryBrowser.saveQueryValues('movies', query);
+        LibraryBrowser.saveQueryValues(getSavedQueryKey(), query);
     }
-    
-    function reloadItems(page) {
 
-        showLoadingMessage(page);
-        
+    function reloadItems(page, viewPanel) {
+
+        Dashboard.showLoadingMsg();
+
+        var query = getQuery();
+
+        query.UserId = Dashboard.getCurrentUserId();
+
         ApiClient.getLiveTvChannels(query).done(function (result) {
 
-            renderChannels(page, result);
+            renderChannels(page, viewPanel, result);
 
-            hideLoadingMessage(page);
+            Dashboard.hideLoadingMsg();
+
+            LibraryBrowser.setLastRefreshed(page);
         });
     }
 
     function updateFilterControls(page) {
 
-        $('#chkFavorite', page).checked(query.IsFavorite == true).checkboxradio('refresh');
-        $('#chkLikes', page).checked(query.IsLiked == true).checkboxradio('refresh');
-        $('#chkDislikes', page).checked(query.IsDisliked == true).checkboxradio('refresh');
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
+        var query = getQuery();
+        $('.chkFavorite', page).checked(query.IsFavorite == true);
+        $('.chkLikes', page).checked(query.IsLiked == true);
+        $('.chkDislikes', page).checked(query.IsDisliked == true);
     }
 
-    $(document).on('pageinit', "#liveTvChannelsPage", function () {
+    window.LiveTvPage.initChannelsTab = function (page, tabContent) {
 
-        var page = this;
+        var viewPanel = page.querySelector('.channelViewPanel');
 
-        $('#chkFavorite', this).on('change', function () {
+        $('.chkFavorite', viewPanel).on('change', function () {
 
+            var query = getQuery();
             query.StartIndex = 0;
             query.IsFavorite = this.checked ? true : null;
 
-            reloadItems(page);
+            reloadItems(tabContent, viewPanel);
         });
 
 
-        $('#chkLikes', this).on('change', function () {
+        $('.chkLikes', viewPanel).on('change', function () {
 
+            var query = getQuery();
             query.StartIndex = 0;
             query.IsLiked = this.checked ? true : null;
 
-            reloadItems(page);
+            reloadItems(tabContent, viewPanel);
         });
 
-        $('#chkDislikes', this).on('change', function () {
+        $('.chkDislikes', viewPanel).on('change', function () {
 
+            var query = getQuery();
             query.StartIndex = 0;
             query.IsDisliked = this.checked ? true : null;
 
-            reloadItems(page);
+            reloadItems(tabContent, viewPanel);
         });
+    };
 
-        $('#selectPageSize', page).on('change', function () {
-            query.Limit = parseInt(this.value);
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
+    window.LiveTvPage.renderChannelsTab = function (page, tabContent) {
 
-    }).on('pageshow', "#liveTvChannelsPage", function () {
+        var viewPanel = page.querySelector('.channelViewPanel');
 
-        // Can't use pagebeforeshow here or the loading popup won't center correctly
-        var page = this;
-
-        var limit = LibraryBrowser.getDefaultPageSize();
-
-        // If the default page size has changed, the start index will have to be reset
-        if (limit != query.Limit) {
-            query.Limit = limit;
-            query.StartIndex = 0;
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            reloadItems(tabContent, viewPanel);
+            updateFilterControls(viewPanel);
         }
-
-        query.UserId = Dashboard.getCurrentUserId();
-
-        LibraryBrowser.loadSavedQueryValues('movies', query);
-
-        reloadItems(page);
-        
-        updateFilterControls(this);
-        
-    });
+    };
 
 })(jQuery, document);

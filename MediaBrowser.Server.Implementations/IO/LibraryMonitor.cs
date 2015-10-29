@@ -3,6 +3,8 @@ using MediaBrowser.Common.ScheduledTasks;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Server.Implementations.ScheduledTasks;
 using Microsoft.Win32;
@@ -13,6 +15,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Controller;
 
 namespace MediaBrowser.Server.Implementations.IO
 {
@@ -81,10 +85,10 @@ namespace MediaBrowser.Server.Implementations.IO
                 throw new ArgumentNullException("path");
             }
 
-            // This is an arbitraty amount of time, but delay it because file system writes often trigger events after RemoveTempIgnore has been called. 
-            // Seeing long delays in some situations, especially over the network.
-            // Seeing delays up to 40 seconds, but not going to ignore changes for that long.
-            await Task.Delay(1500).ConfigureAwait(false);
+            // This is an arbitraty amount of time, but delay it because file system writes often trigger events long after the file was actually written to.
+            // Seeing long delays in some situations, especially over the network, sometimes up to 45 seconds
+            // But if we make this delay too high, we risk missing legitimate changes, such as user adding a new file, or hand-editing metadata
+            await Task.Delay(25000).ConfigureAwait(false);
 
             string val;
             _tempIgnoredPaths.TryRemove(path, out val);
@@ -111,11 +115,12 @@ namespace MediaBrowser.Server.Implementations.IO
         private IServerConfigurationManager ConfigurationManager { get; set; }
 
         private readonly IFileSystem _fileSystem;
+        private readonly IServerApplicationHost _appHost;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LibraryMonitor" /> class.
         /// </summary>
-        public LibraryMonitor(ILogManager logManager, ITaskManager taskManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager, IFileSystem fileSystem)
+        public LibraryMonitor(ILogManager logManager, ITaskManager taskManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager, IFileSystem fileSystem, IServerApplicationHost appHost)
         {
             if (taskManager == null)
             {
@@ -127,6 +132,7 @@ namespace MediaBrowser.Server.Implementations.IO
             Logger = logManager.GetLogger(GetType().Name);
             ConfigurationManager = configurationManager;
             _fileSystem = fileSystem;
+            _appHost = appHost;
 
             SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
         }
@@ -147,9 +153,25 @@ namespace MediaBrowser.Server.Implementations.IO
             Start();
         }
 
+        private bool EnableLibraryMonitor
+        {
+            get
+            {
+                switch (ConfigurationManager.Configuration.EnableLibraryMonitor)
+                {
+                    case AutoOnOff.Auto:
+                        return _appHost.SupportsLibraryMonitor;
+                    case AutoOnOff.Enabled:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        }
+
         public void Start()
         {
-            if (ConfigurationManager.Configuration.EnableRealtimeMonitor)
+            if (EnableLibraryMonitor)
             {
                 StartInternal();
             }
@@ -321,7 +343,7 @@ namespace MediaBrowser.Server.Implementations.IO
             }
             catch
             {
-                
+
             }
             finally
             {
@@ -353,6 +375,14 @@ namespace MediaBrowser.Server.Implementations.IO
             Logger.ErrorException("Error in Directory watcher for: " + dw.Path, ex);
 
             DisposeWatcher(dw);
+
+            if (ConfigurationManager.Configuration.EnableLibraryMonitor == AutoOnOff.Auto)
+            {
+                Logger.Info("Disabling realtime monitor to prevent future instability");
+
+                ConfigurationManager.Configuration.EnableLibraryMonitor = AutoOnOff.Disabled;
+                Stop();
+            }
         }
 
         /// <summary>
@@ -437,11 +467,11 @@ namespace MediaBrowser.Server.Implementations.IO
             {
                 if (_updateTimer == null)
                 {
-                    _updateTimer = new Timer(TimerStopped, null, TimeSpan.FromSeconds(ConfigurationManager.Configuration.RealtimeMonitorDelay), TimeSpan.FromMilliseconds(-1));
+                    _updateTimer = new Timer(TimerStopped, null, TimeSpan.FromSeconds(ConfigurationManager.Configuration.RealtimeLibraryMonitorDelay), TimeSpan.FromMilliseconds(-1));
                 }
                 else
                 {
-                    _updateTimer.Change(TimeSpan.FromSeconds(ConfigurationManager.Configuration.RealtimeMonitorDelay), TimeSpan.FromMilliseconds(-1));
+                    _updateTimer.Change(TimeSpan.FromSeconds(ConfigurationManager.Configuration.RealtimeLibraryMonitorDelay), TimeSpan.FromMilliseconds(-1));
                 }
             }
         }
@@ -560,7 +590,7 @@ namespace MediaBrowser.Server.Implementations.IO
         /// <returns>Task.</returns>
         private async Task ProcessPathChanges(List<string> paths)
         {
-            var itemsToRefresh = paths.Select(Path.GetDirectoryName)
+            var itemsToRefresh = paths
                 .Select(GetAffectedBaseItem)
                 .Where(item => item != null)
                 .Distinct()
@@ -619,7 +649,7 @@ namespace MediaBrowser.Server.Implementations.IO
             if (item != null)
             {
                 // If the item has been deleted find the first valid parent that still exists
-                while (!Directory.Exists(item.Path) && !File.Exists(item.Path))
+				while (!_fileSystem.DirectoryExists(item.Path) && !_fileSystem.FileExists(item.Path))
                 {
                     item = item.Parent;
 
@@ -673,6 +703,25 @@ namespace MediaBrowser.Server.Implementations.IO
             {
                 Stop();
             }
+        }
+    }
+
+    public class LibraryMonitorStartup : IServerEntryPoint
+    {
+        private readonly ILibraryMonitor _monitor;
+
+        public LibraryMonitorStartup(ILibraryMonitor monitor)
+        {
+            _monitor = monitor;
+        }
+
+        public void Run()
+        {
+            _monitor.Start();
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

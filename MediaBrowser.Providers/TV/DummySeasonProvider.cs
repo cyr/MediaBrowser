@@ -10,6 +10,8 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Providers.TV
 {
@@ -19,15 +21,17 @@ namespace MediaBrowser.Providers.TV
         private readonly ILogger _logger;
         private readonly ILocalizationManager _localization;
         private readonly ILibraryManager _libraryManager;
+        private readonly IFileSystem _fileSystem;
 
         private readonly CultureInfo _usCulture = new CultureInfo("en-US");
 
-        public DummySeasonProvider(IServerConfigurationManager config, ILogger logger, ILocalizationManager localization, ILibraryManager libraryManager)
+        public DummySeasonProvider(IServerConfigurationManager config, ILogger logger, ILocalizationManager localization, ILibraryManager libraryManager, IFileSystem fileSystem)
         {
             _config = config;
             _logger = logger;
             _localization = localization;
             _libraryManager = libraryManager;
+            _fileSystem = fileSystem;
         }
 
         public async Task Run(Series series, CancellationToken cancellationToken)
@@ -38,7 +42,7 @@ namespace MediaBrowser.Providers.TV
 
             if (hasNewSeasons)
             {
-                var directoryService = new DirectoryService();
+                var directoryService = new DirectoryService(_fileSystem);
 
                 //await series.RefreshMetadata(new MetadataRefreshOptions(directoryService), cancellationToken).ConfigureAwait(false);
 
@@ -111,13 +115,14 @@ namespace MediaBrowser.Providers.TV
             {
                 Name = seasonName,
                 IndexNumber = seasonNumber,
-                Parent = series,
                 Id = (series.Id + (seasonNumber ?? -1).ToString(_usCulture) + seasonName).GetMBId(typeof(Season))
             };
 
+            season.SetParent(series);
+            
             await series.AddChild(season, cancellationToken).ConfigureAwait(false);
 
-            await season.RefreshMetadata(new MetadataRefreshOptions(), cancellationToken).ConfigureAwait(false);
+            await season.RefreshMetadata(new MetadataRefreshOptions(_fileSystem), cancellationToken).ConfigureAwait(false);
 
             return season;
         }

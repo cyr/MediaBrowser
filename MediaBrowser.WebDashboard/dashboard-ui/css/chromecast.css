@@ -1,44 +1,22 @@
-﻿.btnCastImage {
-    background-color: transparent;
-    background-size: 100%;
-    background-repeat: no-repeat;
-    background-position: center center;
-    width: 26px;
-    height: 100%;
-    display: inline-block;
-    vertical-align: middle;
-}
-
-.btnDefaultCast .btnCastImage {
-    background-image: url(images/chromecast/ic_media_route_off_holo_dark.png);
-}
-
-.btnActiveCast .btnCastImage {
-    background-image: url(images/chromecast/ic_media_route_on_holo_dark.png);
-}
-
-.btnDisabledCast .btnCastImage {
-    background-image: url(images/chromecast/ic_media_route_disabled_holo_dark.png);
-}
-
-.btnCast {
-    white-space: nowrap;
+﻿.btnActiveCast {
+    color: #2ad !important;
 }
 
 .headerSelectedPlayer {
     display: inline-block;
     vertical-align: middle;
     color: #ddd;
-    font-size: 11px;
-    margin-right: .5em;
+    /*font-size: 11px;*/
+    font-weight: 400;
     position: relative;
-    top: 1px;
+    top: 2px;
     max-width: 100px;
     text-overflow: ellipsis;
     overflow: hidden;
+    white-space: nowrap;
 }
 
-@media all and (max-width: 1000px) {
+@media all and (max-width: 600px) {
     .headerSelectedPlayer {
         display: none;
     }

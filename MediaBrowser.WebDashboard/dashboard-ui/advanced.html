@@ -4,7 +4,7 @@
     <title>${TitleAdvanced}</title>
 </head>
 <body>
-    <div id="advancedConfigurationPage" data-role="page" class="page type-interior advancedConfigurationPage">
+    <div id="advancedConfigurationPage" data-role="page" class="page type-interior advancedConfigurationPage" data-require="scripts/advancedconfigurationpage">
 
         <div data-role="content">
             <div class="content-primary">
@@ -12,9 +12,8 @@
                 <div data-role="controlgroup" data-type="horizontal" class="localnav" data-mini="true">
                     <a href="#" data-role="button" class="ui-btn-active">${TabGeneral}</a>
                     <a href="dashboardhosting.html" data-role="button">${TabHosting}</a>
-                    <a href="serversecurity.html" data-role="button">${TabSecurity}</a>
                 </div>
-                <form id="advancedConfigurationForm">
+                <form class="advancedConfigurationForm">
 
                     <ul data-role="listview" class="ulForm">
                         <li id="fldRunAtStartup" style="display: none;">
@@ -35,8 +34,14 @@
                         <div>
                             <br />
                             <ul data-role="listview" class="ulForm">
+                                <li class="fldAutomaticUpdates">
+                                    <div data-role="controlgroup">
+                                        <input type="checkbox" id="chkEnableAutomaticServerUpdates" data-mini="true" />
+                                        <label for="chkEnableAutomaticServerUpdates">${OptionEnableAutomaticServerUpdates}</label>
+                                    </div>
+                                </li>
                                 <li>
-                                    <label for="selectAutomaticUpdateLevel">${LabelAutomaticUpdateLevel}</label>
+                                    <label class="lnlAutomaticUpdateLevel" for="selectAutomaticUpdateLevel"></label>
                                     <select name="selectAutomaticUpdateLevel" id="selectAutomaticUpdateLevel">
                                         <option value="Release">${OptionRelease}</option>
                                         <option value="Beta">${OptionBeta}</option>
@@ -72,11 +77,8 @@
                             <br /><br />
                             <ul data-role="listview" class="ulForm">
                                 <li>
-                                    <label for="txtDashboardSourcePath">${LabelDashboardSourcePath}</label>
-                                    <div style="display: inline-block; width: 92%;">
-                                        <input type="text" id="txtDashboardSourcePath" />
-                                    </div>
-                                    <button id="btnSelectDashboardSourcePath" type="button" data-icon="search" data-iconpos="notext" data-inline="true">${ButtonSelectDirectory}</button>
+                                    <paper-input type="text" id="txtDashboardSourcePath" label="${LabelDashboardSourcePath}" style="display: inline-block; width: 80%;"></paper-input>
+                                    <paper-icon-button id="btnSelectDashboardSourcePath" icon="search" title="${ButtonSelectDirectory}"></paper-icon-button>
                                     <div class="fieldDescription">${LabelDashboardSourcePathHelp}</div>
                                 </li>
                             </ul>
@@ -85,11 +87,8 @@
                     <br />
                     <ul data-role="listview" class="ulForm">
                         <li>
-                            <button type="submit" data-theme="b" data-icon="check">
-                                ${ButtonSave}
-                            </button>
-                            <button type="button" onclick="Dashboard.navigate('dashboard.html');" data-icon="delete">
-                                ${ButtonCancel}
+                            <button type="submit" data-role="none" class="clearButton">
+                                <paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>${ButtonSave}</span></paper-button>
                             </button>
                         </li>
 
@@ -97,10 +96,6 @@
                 </form>
             </div>
         </div>
-
-        <script type="text/javascript">
-            $('#advancedConfigurationForm').on('submit', AdvancedConfigurationPage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

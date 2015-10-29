@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
+using MediaBrowser.Providers.TV;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -17,7 +18,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
-using MediaBrowser.Providers.TV;
+using CommonIO;
 
 namespace MediaBrowser.Providers.Music
 {
@@ -387,7 +388,7 @@ namespace MediaBrowser.Providers.Music
                 // Process images
                 var artistXmlPath = GetArtistXmlPath(_config.CommonApplicationPaths, id);
 
-                var fileInfo = new FileInfo(artistXmlPath);
+                var fileInfo = _fileSystem.GetFileInfo(artistXmlPath);
 
                 return !fileInfo.Exists || _fileSystem.GetLastWriteTimeUtc(fileInfo) > date;
             }
@@ -433,7 +434,7 @@ namespace MediaBrowser.Providers.Music
 
             var xmlPath = GetArtistXmlPath(_config.ApplicationPaths, musicBrainzId);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(xmlPath));
+			_fileSystem.CreateDirectory(Path.GetDirectoryName(xmlPath));
 
             using (var response = await _httpClient.Get(new HttpRequestOptions
             {

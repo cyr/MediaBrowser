@@ -8,15 +8,20 @@
 
             Dashboard.hideLoadingMsg();
 
+            var apiClient = result.ApiClient;
+
             switch (result.State) {
 
                 case MediaBrowser.ConnectionState.SignedIn:
                     {
-                        var apiClient = result.ApiClient;
-
-                        Dashboard.serverAddress(apiClient.serverAddress());
-                        Dashboard.setCurrentUser(apiClient.getCurrentUserId(), apiClient.accessToken());
-                        window.location = 'index.html';
+                        Dashboard.onServerChanged(apiClient.getCurrentUserId(), apiClient.accessToken(), apiClient);
+                        Dashboard.navigate('index.html');
+                    }
+                    break;
+                case MediaBrowser.ConnectionState.ServerSignIn:
+                    {
+                        Dashboard.onServerChanged(null, null, apiClient);
+                        Dashboard.navigate('login.html?serverid=' + result.Servers[0].Id);
                     }
                     break;
                 default:
@@ -43,50 +48,29 @@
 
         var html = '';
 
-        var cssClass = "card squareCard bottomPaddedCard";
+        html += '<paper-icon-item class="serverItem" data-id="' + server.Id + '">';
 
-        html += "<div data-id='" + server.Id + "' data-connectserverid='" + (server.ConnectServerId || '') + "' class='" + cssClass + "'>";
+        html += '<paper-fab mini class="blue lnkServer" icon="wifi" item-icon></paper-fab>';
 
-        html += '<div class="cardBox visualCardBox">';
-        html += '<div class="cardScalable">';
+        html += '<paper-item-body class="lnkServer" two-line>';
+        html += '<a class="clearLink" href="#">';
 
-        html += '<div class="cardPadder"></div>';
-
-        var href = "#";
-        html += '<a class="cardContent lnkServer" data-serverid="' + server.Id + '" href="' + href + '">';
-
-        var imgUrl = 'css/images/server.png';
-
-        html += '<div class="cardImage" style="background-image:url(\'' + imgUrl + '\');">';
-
-        html += "</div>";
-
-        // cardContent
-        html += "</a>";
-
-        // cardScalable
-        html += "</div>";
-
-        html += '<div class="cardFooter">';
-
-        html += '<div class="cardText" style="text-align:right; float:right;">';
-
-        html += '<button class="btnServerMenu" type="button" data-inline="true" data-iconpos="notext" data-icon="ellipsis-v" style="margin: 2px 0 0;"></button>';
-
-        html += "</div>";
-
-        html += '<div class="cardText" style="margin-right: 30px; padding: 11px 0 10px;">';
+        html += '<div>';
         html += server.Name;
-        html += "</div>";
+        html += '</div>';
 
-        // cardFooter
-        html += "</div>";
+        //html += '<div secondary>';
+        //html += MediaBrowser.ServerInfo.getServerAddress(server, server.LastConnectionMode);
+        //html += '</div>';
 
-        // cardBox
-        html += "</div>";
+        html += '</a>';
+        html += '</paper-item-body>';
 
-        // card
-        html += "</div>";
+        if (server.Id) {
+            html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnServerMenu"></paper-icon-button>';
+        }
+
+        html += '</paper-icon-item>';
 
         return html;
     }
@@ -95,24 +79,29 @@
 
         if (servers.length) {
             $('.noServersMessage', page).hide();
+            $('.serverList', page).show();
         } else {
             $('.noServersMessage', page).show();
+            $('.serverList', page).hide();
         }
 
         var html = '';
 
         html += servers.map(getServerHtml).join('');
 
-        var elem = $('.serverList', page).html(html).trigger('create');
+        var elem = $('.serverList', page).html(html);
 
         $('.lnkServer', elem).on('click', function () {
 
-            var id = this.getAttribute('data-serverid');
+            var item = $(this).parents('.serverItem')[0];
+            var id = item.getAttribute('data-id');
+
             var server = servers.filter(function (s) {
                 return s.Id == id;
             })[0];
 
             connectToServer(page, server);
+
         });
 
         $('.btnServerMenu', elem).on('click', function () {
@@ -125,7 +114,7 @@
         // Need the timeout because jquery mobile will not show a popup if there's currently already one in the process of closing
         setTimeout(function () {
 
-            Dashboard.hideLoadingMsg();
+            Dashboard.hideModalLoadingMsg();
             Dashboard.alert({
                 message: Globalize.translate('DefaultErrorMessage')
             });
@@ -135,12 +124,12 @@
 
     function acceptInvitation(page, id) {
 
-        Dashboard.showLoadingMsg();
+        Dashboard.showModalLoadingMsg();
 
         // Add/Update connect info
         ConnectionManager.acceptServer(id).done(function () {
 
-            Dashboard.hideLoadingMsg();
+            Dashboard.hideModalLoadingMsg();
             loadPage(page);
 
         }).fail(function () {
@@ -149,14 +138,15 @@
         });
     }
 
-    function deleteServer(page, id) {
+    function deleteServer(page, serverId) {
 
-        Dashboard.showLoadingMsg();
+        Dashboard.showModalLoadingMsg();
 
         // Add/Update connect info
-        ConnectionManager.deleteServer(id).done(function () {
+        ConnectionManager.deleteServer(serverId).done(function () {
 
-            Dashboard.hideLoadingMsg();
+            Dashboard.hideModalLoadingMsg();
+
             loadPage(page);
 
         }).fail(function () {
@@ -168,12 +158,13 @@
 
     function rejectInvitation(page, id) {
 
-        Dashboard.showLoadingMsg();
+        Dashboard.showModalLoadingMsg();
 
         // Add/Update connect info
         ConnectionManager.rejectServer(id).done(function () {
 
-            Dashboard.hideLoadingMsg();
+            Dashboard.hideModalLoadingMsg();
+
             loadPage(page);
 
         }).fail(function () {
@@ -185,74 +176,80 @@
 
     function showServerMenu(elem) {
 
-        var card = $(elem).parents('.card');
+        var card = $(elem).parents('.serverItem');
         var page = $(elem).parents('.page');
-        var id = card.attr('data-id');
-        var connectserverid = card.attr('data-connectserverid');
+        var serverId = card.attr('data-id');
 
-        $('.serverMenu', page).popup("close").remove();
+        var menuItems = [];
 
-        var html = '<div data-role="popup" class="serverMenu" data-theme="a">';
-
-        html += '<ul data-role="listview" style="min-width: 180px;">';
-        html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
-
-        html += '<li><a href="#" class="btnDelete" data-connectserverid="' + connectserverid + '">' + Globalize.translate('ButtonDelete') + '</a></li>';
-
-        html += '</ul>';
-
-        html += '</div>';
-
-        page.append(html);
-
-        var flyout = $('.serverMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
+        menuItems.push({
+            name: Globalize.translate('ButtonDelete'),
+            id: 'delete',
+            ironIcon: 'delete'
         });
 
-        $('.btnDelete', flyout).on('click', function () {
-            deleteServer(page, this.getAttribute('data-connectserverid'));
-            $('.serverMenu', page).popup("close").remove();
+        require(['actionsheet'], function () {
+
+            ActionSheetElement.show({
+                items: menuItems,
+                positionTo: elem,
+                callback: function (id) {
+
+                    switch (id) {
+
+                        case 'delete':
+                            deleteServer(page, serverId);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            });
+
         });
     }
 
     function showPendingInviteMenu(elem) {
 
-        var card = $(elem).parents('.card');
+        var card = $(elem).parents('.inviteItem');
         var page = $(elem).parents('.page');
-        var id = card.attr('data-id');
+        var invitationId = card.attr('data-id');
 
-        $('.inviteMenu', page).popup("close").remove();
+        var menuItems = [];
 
-        var html = '<div data-role="popup" class="inviteMenu" data-theme="a">';
-
-        html += '<ul data-role="listview" style="min-width: 180px;">';
-        html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
-
-        html += '<li><a href="#" class="btnAccept" data-id="' + id + '">' + Globalize.translate('ButtonAccept') + '</a></li>';
-        html += '<li><a href="#" class="btnReject" data-id="' + id + '">' + Globalize.translate('ButtonReject') + '</a></li>';
-
-        html += '</ul>';
-
-        html += '</div>';
-
-        page.append(html);
-
-        var flyout = $('.inviteMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
+        menuItems.push({
+            name: Globalize.translate('ButtonAccept'),
+            id: 'accept',
+            ironIcon: 'add'
         });
 
-        $('.btnAccept', flyout).on('click', function () {
-            acceptInvitation(page, this.getAttribute('data-id'));
-            $('.inviteMenu', page).popup("close").remove();
+        menuItems.push({
+            name: Globalize.translate('ButtonReject'),
+            id: 'reject',
+            ironIcon: 'cancel'
         });
 
-        $('.btnReject', flyout).on('click', function () {
-            rejectInvitation(page, this.getAttribute('data-id'));
-            $('.inviteMenu', page).popup("close").remove();
+        require(['actionsheet'], function () {
+
+            ActionSheetElement.show({
+                items: menuItems,
+                positionTo: elem,
+                callback: function (id) {
+
+                    switch (id) {
+
+                        case 'accept':
+                            acceptInvitation(page, invitationId);
+                            break;
+                        case 'reject':
+                            rejectInvitation(page, invitationId);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            });
+
         });
     }
 
@@ -260,49 +257,21 @@
 
         var html = '';
 
-        var cssClass = "card squareCard alternateHover bottomPaddedCard";
+        html += '<paper-icon-item class="inviteItem" data-id="' + invite.Id + '">';
 
-        html += "<div data-id='" + invite.Id + "' class='" + cssClass + "'>";
+        html += '<paper-fab mini class="blue lnkServer" icon="wifi" item-icon></paper-fab>';
 
-        html += '<div class="cardBox visualCardBox">';
-        html += '<div class="cardScalable">';
+        html += '<paper-item-body two-line>';
 
-        html += '<div class="cardPadder"></div>';
-
-        var href = "#";
-        html += '<a class="cardContent" href="' + href + '">';
-
-        var imgUrl = 'css/images/server.png';
-
-        html += '<div class="cardImage" style="background-image:url(\'' + imgUrl + '\');">';
-
-        html += "</div>";
-
-        // cardContent
-        html += "</a>";
-
-        // cardScalable
-        html += "</div>";
-
-        html += '<div class="cardFooter">';
-
-        html += '<div class="cardText" style="text-align:right; float:right;">';
-
-        html += '<button class="btnInviteMenu" type="button" data-inline="true" data-iconpos="notext" data-icon="ellipsis-v" style="margin: 2px 0 0;"></button>';
-        html += "</div>";
-
-        html += '<div class="cardText" style="margin-right: 30px; padding: 11px 0 10px;">';
+        html += '<div>';
         html += invite.Name;
-        html += "</div>";
+        html += '</div>';
 
-        // cardFooter
-        html += "</div>";
+        html += '</paper-item-body>';
 
-        // cardBox
-        html += "</div>";
+        html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnInviteMenu"></paper-icon-button>';
 
-        // card
-        html += "</div>";
+        html += '</paper-icon-item>';
 
         return html;
     }
@@ -317,7 +286,7 @@
 
         var html = list.map(getPendingInviteHtml).join('');
 
-        var elem = $('.invitationList', page).html(html).trigger('create');
+        var elem = $('.invitationList', page).html(html);
 
         $('.btnInviteMenu', elem).on('click', function () {
             showPendingInviteMenu(this);
@@ -326,11 +295,19 @@
 
     function loadInvitations(page) {
 
-        ConnectionManager.getUserInvitations().done(function (list) {
+        if (ConnectionManager.isLoggedIntoConnect()) {
 
-            renderInvitations(page, list);
+            ConnectionManager.getUserInvitations().done(function (list) {
 
-        });
+                renderInvitations(page, list);
+
+            });
+
+        } else {
+
+            renderInvitations(page, []);
+        }
+
     }
 
     function loadPage(page) {
@@ -339,37 +316,42 @@
 
         ConnectionManager.getAvailableServers().done(function (servers) {
 
+            servers = servers.slice(0);
+
             renderServers(page, servers);
 
             Dashboard.hideLoadingMsg();
         });
 
         loadInvitations(page);
+
+        if (ConnectionManager.isLoggedIntoConnect()) {
+            $('.connectLogin', page).hide();
+        } else {
+            $('.connectLogin', page).show();
+        }
     }
 
-    $(document).on('pageshow', "#selectServerPage", function () {
+    function updatePageStyle(page) {
+
+        if (ConnectionManager.isLoggedIntoConnect()) {
+            $(page).addClass('libraryPage').addClass('noSecondaryNavPage').removeClass('standalonePage');
+        } else {
+            $(page).removeClass('libraryPage').removeClass('noSecondaryNavPage').addClass('standalonePage');
+        }
+    }
+
+    $(document).on('pageinit pagebeforeshow', "#selectServerPage", function () {
+
+        var page = this;
+        updatePageStyle(page);
+
+    }).on('pageshow', "#selectServerPage", function () {
 
         var page = this;
 
         loadPage(page);
 
     });
-
-    window.SelectServerPage = {
-
-        onServerAddressEntrySubmit: function () {
-
-            Dashboard.showLoadingMsg();
-
-            var form = this;
-            var page = $(form).parents('.page');
-
-
-            // Disable default form submission
-            return false;
-
-        }
-
-    };
 
 })();

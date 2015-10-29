@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CommonIO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.MediaInfo;
 
@@ -38,7 +39,7 @@ namespace MediaBrowser.MediaEncoding.Probing
 
             var internalStreams = data.streams ?? new MediaStreamInfo[] { };
 
-            info.MediaStreams = internalStreams.Select(s => GetMediaStream(s, data.format))
+            info.MediaStreams = internalStreams.Select(s => GetMediaStream(isAudio, s, data.format))
                 .Where(i => i != null)
                 .ToList();
 
@@ -56,10 +57,33 @@ namespace MediaBrowser.MediaEncoding.Probing
             {
                 SetAudioRuntimeTicks(data, info);
 
+                var tags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                // tags are normally located under data.format, but we've seen some cases with ogg where they're part of the audio stream
+                // so let's create a combined list of both
+
+                if (data.streams != null)
+                {
+                    var audioStream = data.streams.FirstOrDefault(i => string.Equals(i.codec_type, "audio", StringComparison.OrdinalIgnoreCase));
+
+                    if (audioStream != null && audioStream.tags != null)
+                    {
+                        foreach (var pair in audioStream.tags)
+                        {
+                            tags[pair.Key] = pair.Value;
+                        }
+                    }
+                }
+
                 if (data.format != null && data.format.tags != null)
                 {
-                    SetAudioInfoFromTags(info, data.format.tags);
+                    foreach (var pair in data.format.tags)
+                    {
+                        tags[pair.Key] = pair.Value;
+                    }
                 }
+
+                SetAudioInfoFromTags(info, tags);
             }
             else
             {
@@ -91,14 +115,22 @@ namespace MediaBrowser.MediaEncoding.Probing
         /// <summary>
         /// Converts ffprobe stream info to our MediaStream class
         /// </summary>
+        /// <param name="isAudio">if set to <c>true</c> [is audio].</param>
         /// <param name="streamInfo">The stream info.</param>
         /// <param name="formatInfo">The format info.</param>
         /// <returns>MediaStream.</returns>
-        private MediaStream GetMediaStream(MediaStreamInfo streamInfo, MediaFormatInfo formatInfo)
+        private MediaStream GetMediaStream(bool isAudio, MediaStreamInfo streamInfo, MediaFormatInfo formatInfo)
         {
+            // These are mp4 chapters
+            if (string.Equals(streamInfo.codec_name, "mov_text", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             var stream = new MediaStream
             {
                 Codec = streamInfo.codec_name,
+                CodecTag = streamInfo.codec_tag_string,
                 Profile = streamInfo.profile,
                 Level = streamInfo.level,
                 Index = streamInfo.index,
@@ -118,7 +150,11 @@ namespace MediaBrowser.MediaEncoding.Probing
 
                 if (!string.IsNullOrEmpty(streamInfo.sample_rate))
                 {
-                    stream.SampleRate = int.Parse(streamInfo.sample_rate, _usCulture);
+                    int value;
+                    if (int.TryParse(streamInfo.sample_rate, NumberStyles.Any, _usCulture, out value))
+                    {
+                        stream.SampleRate = value;
+                    }
                 }
 
                 stream.ChannelLayout = ParseChannelLayout(streamInfo.channel_layout);
@@ -129,7 +165,7 @@ namespace MediaBrowser.MediaEncoding.Probing
             }
             else if (string.Equals(streamInfo.codec_type, "video", StringComparison.OrdinalIgnoreCase))
             {
-                stream.Type = (streamInfo.codec_name ?? string.Empty).IndexOf("mjpeg", StringComparison.OrdinalIgnoreCase) != -1
+                stream.Type = isAudio || string.Equals(stream.Codec, "mjpeg", StringComparison.OrdinalIgnoreCase)
                     ? MediaStreamType.EmbeddedImage
                     : MediaStreamType.Video;
 
@@ -146,44 +182,8 @@ namespace MediaBrowser.MediaEncoding.Probing
                 //    string.Equals(stream.AspectRatio, "2.35:1", StringComparison.OrdinalIgnoreCase) ||
                 //    string.Equals(stream.AspectRatio, "2.40:1", StringComparison.OrdinalIgnoreCase);
 
-                if (string.Equals(streamInfo.sample_aspect_ratio, "1:1", StringComparison.OrdinalIgnoreCase))
-                {
-                    stream.IsAnamorphic = false;
-                }
-                else if (!((string.IsNullOrWhiteSpace(streamInfo.sample_aspect_ratio) || string.Equals(streamInfo.sample_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase))))
-                {
-                    stream.IsAnamorphic = true;
-                }
-                else if (string.IsNullOrWhiteSpace(streamInfo.display_aspect_ratio) || string.Equals(streamInfo.display_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase))
-                {
-                    stream.IsAnamorphic = false;
-                }
-                else
-                {
-                    var ratioParts = streamInfo.display_aspect_ratio.Split(':');
-                    if (ratioParts.Length != 2)
-                    {
-                        stream.IsAnamorphic = false;
-                    }
-                    else
-                    {
-                        int ratio0;
-                        int ratio1;
-                        if (!Int32.TryParse(ratioParts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out ratio0))
-                        {
-                            stream.IsAnamorphic = false;
-                        }
-                        else if (!Int32.TryParse(ratioParts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out ratio1))
-                        {
-                            stream.IsAnamorphic = false;
-                        }
-                        else
-                        {
-                            stream.IsAnamorphic = ((streamInfo.width * ratio1) != (stream.Height * ratio0));
-                        }
-                    }
-                }
-            
+                // http://stackoverflow.com/questions/17353387/how-to-detect-anamorphic-video-with-ffprobe
+                stream.IsAnamorphic = string.Equals(streamInfo.sample_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase);
             }
             else
             {
@@ -195,12 +195,21 @@ namespace MediaBrowser.MediaEncoding.Probing
 
             if (!string.IsNullOrEmpty(streamInfo.bit_rate))
             {
-                bitrate = int.Parse(streamInfo.bit_rate, _usCulture);
+                int value;
+                if (int.TryParse(streamInfo.bit_rate, NumberStyles.Any, _usCulture, out value))
+                {
+                    bitrate = value;
+                }
             }
-            else if (formatInfo != null && !string.IsNullOrEmpty(formatInfo.bit_rate) && stream.Type == MediaStreamType.Video)
+
+            if (bitrate == 0 && formatInfo != null && !string.IsNullOrEmpty(formatInfo.bit_rate) && stream.Type == MediaStreamType.Video)
             {
                 // If the stream info doesn't have a bitrate get the value from the media format info
-                bitrate = int.Parse(formatInfo.bit_rate, _usCulture);
+                int value;
+                if (int.TryParse(formatInfo.bit_rate, NumberStyles.Any, _usCulture, out value))
+                {
+                    bitrate = value;
+                }
             }
 
             if (bitrate > 0)
@@ -452,7 +461,7 @@ namespace MediaBrowser.MediaEncoding.Probing
 
             if (!string.IsNullOrWhiteSpace(artists))
             {
-                audio.Artists = artists.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+                audio.Artists = SplitArtists(artists, new[] { '/' }, false)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
@@ -465,7 +474,7 @@ namespace MediaBrowser.MediaEncoding.Probing
                 }
                 else
                 {
-                    audio.Artists = SplitArtists(artist)
+                    audio.Artists = SplitArtists(artist, _nameDelimiters, true)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
                 }
@@ -487,7 +496,7 @@ namespace MediaBrowser.MediaEncoding.Probing
             }
             else
             {
-                audio.AlbumArtists = SplitArtists(albumArtist)
+                audio.AlbumArtists = SplitArtists(albumArtist, _nameDelimiters, true)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
@@ -519,14 +528,28 @@ namespace MediaBrowser.MediaEncoding.Probing
             FetchStudios(audio, tags, "organization");
             FetchStudios(audio, tags, "ensemble");
             FetchStudios(audio, tags, "publisher");
+            FetchStudios(audio, tags, "label");
 
             // These support mulitple values, but for now we only store the first.
-            audio.SetProviderId(MetadataProviders.MusicBrainzAlbumArtist, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Artist Id")));
-            audio.SetProviderId(MetadataProviders.MusicBrainzArtist, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Artist Id")));
+            var mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Artist Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_ALBUMARTISTID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzAlbumArtist, mb);
 
-            audio.SetProviderId(MetadataProviders.MusicBrainzAlbum, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Id")));
-            audio.SetProviderId(MetadataProviders.MusicBrainzReleaseGroup, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Group Id")));
-            audio.SetProviderId(MetadataProviders.MusicBrainzTrack, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Track Id")));
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Artist Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_ARTISTID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzArtist, mb);
+
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_ALBUMID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzAlbum, mb);
+
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Group Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_RELEASEGROUPID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzReleaseGroup, mb);
+
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Track Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_RELEASETRACKID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzTrack, mb);
         }
 
         private string GetMultipleMusicBrainzId(string value)
@@ -564,10 +587,13 @@ namespace MediaBrowser.MediaEncoding.Probing
 
         private const string ArtistReplaceValue = " | ";
 
-        private IEnumerable<string> SplitArtists(string val)
+        private IEnumerable<string> SplitArtists(string val, char[] delimiters, bool splitFeaturing)
         {
-            val = val.Replace(" featuring ", ArtistReplaceValue, StringComparison.OrdinalIgnoreCase)
-                .Replace(" feat. ", ArtistReplaceValue, StringComparison.OrdinalIgnoreCase);
+            if (splitFeaturing)
+            {
+                val = val.Replace(" featuring ", ArtistReplaceValue, StringComparison.OrdinalIgnoreCase)
+                    .Replace(" feat. ", ArtistReplaceValue, StringComparison.OrdinalIgnoreCase);
+            }
 
             var artistsFound = new List<string>();
 
@@ -582,11 +608,7 @@ namespace MediaBrowser.MediaEncoding.Probing
                 }
             }
 
-            // Only use the comma as a delimeter if there are no slashes or pipes. 
-            // We want to be careful not to split names that have commas in them
-            var delimeter = _nameDelimiters;
-
-            var artists = val.Split(delimeter, StringSplitOptions.RemoveEmptyEntries)
+            var artists = val.Split(delimiters, StringSplitOptions.RemoveEmptyEntries)
                 .Where(i => !string.IsNullOrWhiteSpace(i))
                 .Select(i => i.Trim());
 

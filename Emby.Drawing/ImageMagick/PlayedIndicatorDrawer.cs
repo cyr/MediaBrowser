@@ -1,8 +1,12 @@
 ﻿using ImageMagickSharp;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Model.Drawing;
 using System;
 using System.IO;
+using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace Emby.Drawing.ImageMagick
 {
@@ -12,13 +16,17 @@ namespace Emby.Drawing.ImageMagick
         private const int OffsetFromTopRightCorner = 38;
 
         private readonly IApplicationPaths _appPaths;
+		private readonly IHttpClient _iHttpClient;
+		private readonly IFileSystem _fileSystem;
 
-        public PlayedIndicatorDrawer(IApplicationPaths appPaths)
+		public PlayedIndicatorDrawer(IApplicationPaths appPaths, IHttpClient iHttpClient, IFileSystem fileSystem)
         {
             _appPaths = appPaths;
+            _iHttpClient = iHttpClient;
+			_fileSystem = fileSystem;
         }
 
-        public void DrawPlayedIndicator(MagickWand wand, ImageSize imageSize)
+        public async Task DrawPlayedIndicator(MagickWand wand, ImageSize imageSize)
         {
             var x = imageSize.Width - OffsetFromTopRightCorner;
 
@@ -34,7 +42,7 @@ namespace Emby.Drawing.ImageMagick
                     pixel.Opacity = 0;
                     pixel.Color = "white";
                     draw.FillColor = pixel;
-                    draw.Font = ExtractFont("webdings.ttf", _appPaths);
+                    draw.Font = await DownloadFont("webdings.ttf", "https://github.com/MediaBrowser/Emby.Resources/raw/master/fonts/webdings.ttf", _appPaths, _iHttpClient, _fileSystem).ConfigureAwait(false);
                     draw.FontSize = FontSize;
                     draw.FontStyle = FontStyleType.NormalStyle;
                     draw.TextAlignment = TextAlignType.CenterAlign;
@@ -48,18 +56,18 @@ namespace Emby.Drawing.ImageMagick
             }
         }
 
-        internal static string ExtractFont(string name, IApplicationPaths paths)
+		internal static string ExtractFont(string name, IApplicationPaths paths, IFileSystem fileSystem)
         {
             var filePath = Path.Combine(paths.ProgramDataPath, "fonts", name);
 
-            if (File.Exists(filePath))
+			if (fileSystem.FileExists(filePath))
             {
                 return filePath;
             }
 
             var namespacePath = typeof(PlayedIndicatorDrawer).Namespace + ".fonts." + name;
             var tempPath = Path.Combine(paths.TempDirectory, Guid.NewGuid().ToString("N") + ".ttf");
-            Directory.CreateDirectory(Path.GetDirectoryName(tempPath));
+			fileSystem.CreateDirectory(Path.GetDirectoryName(tempPath));
 
             using (var stream = typeof(PlayedIndicatorDrawer).Assembly.GetManifestResourceStream(namespacePath))
             {
@@ -69,15 +77,45 @@ namespace Emby.Drawing.ImageMagick
                 }
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+			fileSystem.CreateDirectory(Path.GetDirectoryName(filePath));
 
             try
             {
-                File.Copy(tempPath, filePath, false);
+				fileSystem.CopyFile(tempPath, filePath, false);
             }
             catch (IOException)
             {
-                
+
+            }
+
+            return tempPath;
+        }
+
+		internal static async Task<string> DownloadFont(string name, string url, IApplicationPaths paths, IHttpClient httpClient, IFileSystem fileSystem)
+        {
+            var filePath = Path.Combine(paths.ProgramDataPath, "fonts", name);
+
+			if (fileSystem.FileExists(filePath))
+            {
+                return filePath;
+            }
+
+            var tempPath = await httpClient.GetTempFile(new HttpRequestOptions
+            {
+                Url = url,
+                Progress = new Progress<double>()
+
+            }).ConfigureAwait(false);
+
+			fileSystem.CreateDirectory(Path.GetDirectoryName(filePath));
+
+            try
+            {
+				fileSystem.CopyFile(tempPath, filePath, false);
+            }
+            catch (IOException)
+            {
+
             }
 
             return tempPath;

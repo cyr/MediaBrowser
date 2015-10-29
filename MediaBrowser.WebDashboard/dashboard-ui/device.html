@@ -4,7 +4,7 @@
     <title>${TitleDevices}</title>
 </head>
 <body>
-    <div id="devicePage" data-role="page" class="page type-interior devicesPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Devices">
+    <div id="devicePage" data-role="page" class="page type-interior devicesPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Devices" data-require="scripts/device">
 
         <div data-role="content">
             <div class="content-primary">
@@ -29,22 +29,16 @@
                                 <div class="fieldDescription">${LabelCustomDeviceDisplayNameHelp}</div>
                             </li>
                             <li id="fldCameraUploadPath" style="display:none;">
-                                <label for="txtUploadPath">${LabelCameraUploadPath}</label>
-                                <div style="display: inline-block; width: 92%;">
-                                    <input type="text" id="txtUploadPath" />
-                                </div>
-                                <button id="btnSelectUploadPath" type="button" data-icon="search" data-iconpos="notext" data-inline="true">${ButtonSelectDirectory}</button>
+                                <paper-input id="txtUploadPath" label="${LabelCameraUploadPath}" style="width:85%;display:inline-block;"></paper-input>
+                                <paper-icon-button id="btnSelectUploadPath" icon="search"></paper-icon-button>
                                 <div class="fieldDescription">${LabelCameraUploadPathHelp}</div>
                             </li>
 
                         </ul><br />
                         <ul data-role="listview" class="ulForm">
                             <li>
-                                <button type="submit" data-theme="b" data-icon="check">
-                                    ${ButtonSave}
-                                </button>
-                                <button type="button" onclick="Dashboard.navigate('devices.html');" data-icon="delete">
-                                    ${ButtonCancel}
+                                <button type="submit" data-role="none" class="clearButton">
+                                    <paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>${ButtonSave}</span></paper-button>
                                 </button>
                             </li>
                         </ul>
@@ -54,9 +48,6 @@
                 </div>
             </div>
         </div>
-        <script type="text/javascript">
-            $('.deviceForm').off('submit', DevicePage.onSubmit).on('submit', DevicePage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

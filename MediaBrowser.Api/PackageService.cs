@@ -56,6 +56,8 @@ namespace MediaBrowser.Api
 
         [ApiMember(Name = "IsAdult", Description = "Optional. Filter by package that contain adult content.", IsRequired = false, DataType = "boolean", ParameterType = "query", Verb = "GET")]
         public bool? IsAdult { get; set; }
+
+        public bool? IsAppStoreEnabled { get; set; }
     }
 
     /// <summary>
@@ -188,7 +190,7 @@ namespace MediaBrowser.Api
         /// <returns>System.Object.</returns>
         public async Task<object> Get(GetPackages request)
         {
-            var packages = await _installationManager.GetAvailablePackages(CancellationToken.None, request.PackageType, _appHost.ApplicationVersion).ConfigureAwait(false);
+            var packages = await _installationManager.GetAvailablePackages(CancellationToken.None, false, request.PackageType, _appHost.ApplicationVersion).ConfigureAwait(false);
 
             if (!string.IsNullOrEmpty(request.TargetSystems))
             {
@@ -205,6 +207,11 @@ namespace MediaBrowser.Api
             if (request.IsAdult.HasValue)
             {
                 packages = packages.Where(p => p.adult == request.IsAdult.Value);
+            }
+
+            if (request.IsAppStoreEnabled.HasValue)
+            {
+                packages = packages.Where(p => p.enableInAppStore == request.IsAppStoreEnabled.Value);
             }
 
             return ToOptimizedResult(packages.ToList());

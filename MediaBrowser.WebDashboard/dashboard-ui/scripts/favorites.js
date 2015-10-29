@@ -1,15 +1,30 @@
 ﻿(function ($, document) {
 
+    function enableScrollX() {
+        return $.browser.mobile && AppInfo.enableAppLayouts;
+    }
+
+    function getThumbShape() {
+        return enableScrollX() ? 'overflowBackdrop' : 'backdrop';
+    }
+
+    function getPosterShape() {
+        return enableScrollX() ? 'overflowPortrait' : 'portrait';
+    }
+
+    function getSquareShape() {
+        return enableScrollX() ? 'overflowSquare' : 'square';
+    }
+
     function getSections() {
 
         return [
-            { name: Globalize.translate('HeaderFavoriteMovies'), types: "Movie", id: "favoriteMovies", shape: 'backdrop', preferThumb: true, showTitle: false },
-            { name: Globalize.translate('HeaderFavoriteShows'), types: "Series", id: "favoriteShows", shape: 'backdrop', preferThumb: true, showTitle: false },
-            { name: Globalize.translate('HeaderFavoriteEpisodes'), types: "Episode", id: "favoriteEpisode", shape: 'backdrop', preferThumb: false, showTitle: true, showParentTitle: true },
-            { name: Globalize.translate('HeaderFavoriteGames'), types: "Game", id: "favoriteGames", shape: 'autohome', preferThumb: false, showTitle: true },
-            { name: Globalize.translate('HeaderFavoriteAlbums'), types: "MusicAlbum", id: "favoriteAlbums", shape: 'square', preferThumb: false, showTitle: true, overlayText: false, showParentTitle: true }
+            { name: 'HeaderFavoriteMovies', types: "Movie", id: "favoriteMovies", shape: getPosterShape(), showTitle: false },
+            { name: 'HeaderFavoriteShows', types: "Series", id: "favoriteShows", shape: getPosterShape(), showTitle: false },
+            { name: 'HeaderFavoriteEpisodes', types: "Episode", id: "favoriteEpisode", shape: getThumbShape(), preferThumb: false, showTitle: true, showParentTitle: true },
+            { name: 'HeaderFavoriteGames', types: "Game", id: "favoriteGames", shape: getSquareShape(), preferThumb: false, showTitle: true },
+            { name: 'HeaderFavoriteAlbums', types: "MusicAlbum", id: "favoriteAlbums", shape: getSquareShape(), preferThumb: false, showTitle: true, overlayText: false, showParentTitle: true, centerText: true, overlayPlayButton: true }
         ];
-
     }
 
     function loadSection(elem, userId, section, isSingleSection) {
@@ -18,7 +33,7 @@
 
         var options = {
 
-            SortBy: isSingleSection ? "SortName" : "Random",
+            SortBy: "SortName",
             SortOrder: "Ascending",
             IncludeItemTypes: section.types,
             Filters: "IsFavorite",
@@ -33,41 +48,55 @@
             options.Limit = null;
         }
 
-        ApiClient.getItems(userId, options).done(function (result) {
+        return ApiClient.getItems(userId, options).done(function (result) {
 
             var html = '';
 
             if (result.Items.length) {
-                html += '<h1 class="listHeader">' + section.name + '</h1>';
+
                 html += '<div>';
+                html += '<h1 style="display:inline-block; vertical-align:middle;" class="listHeader">' + Globalize.translate(section.name) + '</h1>';
+
+                if (result.TotalRecordCount > result.Items.length) {
+                    var href = "secondaryitems.html?type=" + section.types + "&filters=IsFavorite&titlekey=" + section.name;
+
+                    html += '<a class="clearLink" href="' + href + '" style="margin-left:2em;"><paper-button raised class="more mini">' + Globalize.translate('ButtonMore') + '</paper-button></a>';
+                }
+
+                html += '</div>';
+
+                if (enableScrollX()) {
+                    html += '<div class="itemsContainer hiddenScrollX">';
+                } else {
+                    html += '<div class="itemsContainer">';
+                }
+
                 html += LibraryBrowser.getPosterViewHtml({
                     items: result.Items,
                     preferThumb: section.preferThumb,
                     shape: section.shape,
                     overlayText: section.overlayText !== false,
-                    context: 'home-favorites',
                     showTitle: section.showTitle,
                     showParentTitle: section.showParentTitle,
-                    lazy: true
+                    lazy: true,
+                    showDetailsMenu: true,
+                    centerText: section.centerText,
+                    overlayPlayButton: section.overlayPlayButton,
+                    context: 'home-favorites'
                 });
 
-                if (result.TotalRecordCount > result.Items.length) {
-                    html += '<div class="itemsContainer">';
-
-                    var href = "favorites.html?sectionid=" + section.id;
-
-                    html += '<a data-role="button" href="' + href + '" data-mini="true" data-inline="true">' + Globalize.translate('ButtonMoreItems') + '</a>';
-                    html += '</div>';
-                }
                 html += '</div>';
             }
 
-            elem = $(elem).html(html).trigger('create').lazyChildren();
-            elem.createCardMenus();
+            elem.innerHTML = html;
+            ImageLoader.lazyChildren(elem);
+            $(elem).createCardMenus();
         });
     }
 
     function loadSections(page, userId) {
+
+        Dashboard.showLoadingMsg();
 
         var sections = getSections();
 
@@ -82,35 +111,54 @@
 
         var i, length;
 
-        var elem = $('.sections', page);
+        var elem = page.querySelector('.sections');
 
-        if (!elem.html().length) {
+        if (!elem.innerHTML) {
             var html = '';
             for (i = 0, length = sections.length; i < length; i++) {
 
                 html += '<div class="homePageSection section' + sections[i].id + '"></div>';
             }
 
-            elem.html(html);
+            elem.innerHTML = html;
         }
+
+        var promises = [];
 
         for (i = 0, length = sections.length; i < length; i++) {
 
             var section = sections[i];
 
-            elem = $('.section' + section.id, page);
+            elem = page.querySelector('.section' + section.id);
 
-            loadSection(elem, userId, section, sections.length == 1);
+            promises.push(loadSection(elem, userId, section, sections.length == 1));
         }
+
+        $.when(promises).done(function () {
+            Dashboard.hideLoadingMsg();
+
+            LibraryBrowser.setLastRefreshed(page);
+        });
     }
 
-    $(document).on('pagebeforeshow', "#favoritesPage", function () {
+    function initHomePage() {
+
+        window.HomePage.renderFavorites = function (page, tabContent) {
+            if (LibraryBrowser.needsRefresh(tabContent)) {
+                loadSections(tabContent, Dashboard.getCurrentUserId());
+            }
+        };
+    }
+
+    initHomePage();
+
+    pageIdOn('pageshow', "favoritesPage", function () {
 
         var page = this;
 
-        var userId = Dashboard.getCurrentUserId();
-
-        loadSections(page, userId);
+        if (LibraryBrowser.needsRefresh(page)) {
+            loadSections(page, Dashboard.getCurrentUserId());
+        }
     });
 
 })(jQuery, document);

@@ -1,4 +1,5 @@
 ﻿using MediaBrowser.Model.Dlna;
+using System.Linq;
 using System.Xml.Serialization;
 
 namespace MediaBrowser.Dlna.Profiles
@@ -30,12 +31,13 @@ namespace MediaBrowser.Dlna.Profiles
             MaxIconWidth = 48;
             MaxIconHeight = 48;
 
-            MaxStreamingBitrate = 8000000;
-            MaxStaticBitrate = 8000000;
+            MaxStreamingBitrate = 10000000;
+            MaxStaticBitrate = 10000000;
             MusicStreamingTranscodingBitrate = 128000;
             MusicSyncBitrate = 128000;
 
             EnableAlbumArtInDidl = false;
+            EnableDlnaProtocol = true;
 
             TranscodingProfiles = new[]
             {
@@ -75,6 +77,20 @@ namespace MediaBrowser.Dlna.Profiles
                     Type = DlnaProfileType.Video
                 }
             };
+        }
+
+        public void AddXmlRootAttribute(string name, string value)
+        {
+            var atts = XmlRootAttributes ?? new XmlAttribute[] { };
+            var list = atts.ToList();
+
+            list.Add(new XmlAttribute
+            {
+                Name = name,
+                Value = value
+            });
+
+            XmlRootAttributes = list.ToArray();
         }
     }
 }

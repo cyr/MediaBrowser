@@ -1,6 +1,6 @@
 ﻿(function () {
 
-    $(document).on('pagebeforeshow', "#logPage", function () {
+    $(document).on('pageshow', "#logPage", function () {
 
         var page = this;
 
@@ -30,7 +30,7 @@
 
                 var text = date.toLocaleDateString();
 
-                text += ' ' + LiveTvHelpers.getDisplayTime(date);
+                text += ' ' + LibraryBrowser.getDisplayTime(date);
 
                 logHtml += '<p>' + text + '</p>';
 
@@ -43,11 +43,9 @@
 
             html += '</ul>';
 
-            $('.serverLogs', page).html(html).trigger('create');
+            Events.trigger($('.serverLogs', page).html(html)[0], 'create');
 
         });
-
-
     });
 
 })();

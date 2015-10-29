@@ -4,18 +4,18 @@
     <title>${TitleLiveTV}</title>
 </head>
 <body>
-    <div id="liveTvSettingsPage" data-role="page" class="page type-interior liveTvSettingsPage liveTvPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Live%20TV">
+    <div id="liveTvSettingsPage" data-role="page" class="page type-interior liveTvSettingsPage liveTvPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Live%20TV" data-require="scripts/livetvsettings">
 
         <div data-role="content">
             <div class="content-primary">
 
                 <div data-role="controlgroup" data-type="horizontal" class="localnav" data-mini="true">
-                    <a href="livetvstatus.html" data-role="button">${TabStatus}</a>
-                    <a href="appservices.html?context=livetv" data-role="button">${TabServices}</a>
+                    <a href="livetvstatus.html" data-role="button">${TabTuners}</a>
                     <a href="#" data-role="button" class="ui-btn-active">${TabSettings}</a>
+                    <a href="appservices.html?context=livetv" data-role="button">${TabExternalServices}</a>
                 </div>
 
-                <form class="liveTvSettingsForm" style="display: none;">
+                <form class="liveTvSettingsForm">
 
                     <ul data-role="listview" class="ulForm">
                         <li>
@@ -36,44 +36,53 @@
                                 <option value="12">12</option>
                                 <option value="13">13</option>
                                 <option value="14">14</option>
-                           </select>
+                            </select>
                             <div class="fieldDescription">${LabelNumberOfGuideDaysHelp}</div>
                         </li>
                     </ul>
+                    <div class="paperCheckboxList">
+                        <label>${LabelEnableInternetMetadataForTvPrograms}</label>
+                        <paper-checkbox id="chkMovies">${OptionTVMovies}</paper-checkbox>
+                    </div>
                     <div>
-                        <fieldset data-role="controlgroup">
-                            <legend>${LabelEnableInternetMetadataForTvPrograms}</legend>
-                            <label for="chkMovies">${OptionTVMovies}</label>
-                            <input type="checkbox" id="chkMovies" />
-                        </fieldset>
+                        <br />
+                        <paper-input id="txtRecordingPath" label="${LabelRecordingPath}" style="width:84%;display:inline-block;"></paper-input>
+                        <paper-icon-button id="btnSelectRecordingPath" icon="search"></paper-icon-button>
+                        <div class="fieldDescription">${LabelRecordingPathHelp}</div>
+                    </div>
+                    <br />
+                    <br />
+                    <div>
+                        <paper-checkbox id="chkOrganize">${OptionSendRecordingsToAutoOrganize}</paper-checkbox>
+                        <div class="fieldDescription paperCheckboxFieldDescription">${OptionSendRecordingsToAutoOrganizeHelp}</div>
+                    </div>
+                    <br />
+                    <br />
+                    <div>
+                        <h1>${HeaderDefaultPadding}</h1>
+                        <div>
+                            <paper-input type="number" id="txtPrePaddingMinutes" pattern="[0-9]*" required="required" min="0" step="1" label="${LabelPrePaddingMinutes}"></paper-input>
+                        </div>
+                        <div>
+                            <paper-input type="number" id="txtPostPaddingMinutes" pattern="[0-9]*" required="required" min="0" step="1" label="${LabelPostPaddingMinutes}"></paper-input>
+                        </div>
+
                     </div>
                     <br />
                     <br />
                     <ul data-role="listview" class="ulForm">
                         <li>
-                            <button type="submit" data-theme="b" data-icon="check">
-                                ${ButtonSave}
+                            <button type="submit" data-role="none" class="clearButton">
+                                <paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>${ButtonSave}</span></paper-button>
                             </button>
-                            <button type="button" onclick="Dashboard.navigate('dashboard.html');" data-icon="delete">
-                                ${ButtonCancel}
-                            </button>
+
+                            <paper-button raised class="cancel block btnCancel" onclick="history.back();"><iron-icon icon="close"></iron-icon><span>${ButtonCancel}</span></paper-button>
                         </li>
                     </ul>
 
                 </form>
-                <div class="noLiveTvServices" style="display: none;">
-                    <div class="readOnlyContent" style="margin-top: 2em;">
-                        <p>${LiveTvPluginRequired}</p>
-
-                        <p><a href="plugincatalog.html">${LiveTvPluginRequiredHelp}</a></p>
-                    </div>
-                </div>
             </div>
         </div>
-
-        <script type="text/javascript">
-            $('.liveTvSettingsForm').off('submit', LiveTvSettingsPage.onSubmit).on('submit', LiveTvSettingsPage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

@@ -15,7 +15,7 @@
 
     function getSavedQueryKey() {
 
-        return 'gamesystems' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function reloadItems(page) {
@@ -25,7 +25,7 @@
         ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
 
             updateFilterControls(page);
 
@@ -39,7 +39,9 @@
 
             });
 
-            $('#items', page).html(html).lazyChildren();
+            var elem = page.querySelector('#items');
+            elem.innerHTML = html;
+            ImageLoader.lazyChildren(elem);
 
             LibraryBrowser.saveQueryValues(getSavedQueryKey(), query);
 
@@ -67,8 +69,6 @@
         LibraryBrowser.loadSavedQueryValues(getSavedQueryKey(), query);
 
         reloadItems(this);
-
-    }).on('pageshow', "#gamesystemsPage", function () {
 
         updateFilterControls(this);
     });

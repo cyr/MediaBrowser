@@ -1,5 +1,6 @@
 ﻿using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using System;
 using System.Collections.Generic;
@@ -8,12 +9,25 @@ namespace MediaBrowser.Providers.Manager
 {
     public static class ProviderUtils
     {
-        public static void MergeBaseItemData(BaseItem source, 
-            BaseItem target, 
+        public static void MergeBaseItemData<T>(MetadataResult<T> sourceResult,
+            MetadataResult<T> targetResult, 
             List<MetadataFields> lockedFields, 
             bool replaceData, 
             bool mergeMetadataSettings)
+            where T : BaseItem
         {
+            var source = sourceResult.Item;
+            var target = targetResult.Item;
+
+            if (source == null)
+            {
+                throw new ArgumentNullException("source");
+            }
+            if (target == null)
+            {
+                throw new ArgumentNullException("target");
+            }
+
             if (!lockedFields.Contains(MetadataFields.Name))
             {
                 if (replaceData || string.IsNullOrEmpty(target.Name))
@@ -91,9 +105,9 @@ namespace MediaBrowser.Providers.Manager
 
             if (!lockedFields.Contains(MetadataFields.Cast))
             {
-                if (replaceData || target.People.Count == 0)
+                if (replaceData || targetResult.People == null || targetResult.People.Count == 0)
                 {
-                    target.People = source.People;
+                    targetResult.People = sourceResult.People ?? new List<PersonInfo>();
                 }
             }
 
@@ -213,14 +227,8 @@ namespace MediaBrowser.Providers.Manager
                 target.DateCreated = source.DateCreated;
             }
 
-            var sourceHasLanguageSettings = source as IHasPreferredMetadataLanguage;
-            var targetHasLanguageSettings = target as IHasPreferredMetadataLanguage;
-
-            if (sourceHasLanguageSettings != null && targetHasLanguageSettings != null)
-            {
-                targetHasLanguageSettings.PreferredMetadataCountryCode = sourceHasLanguageSettings.PreferredMetadataCountryCode;
-                targetHasLanguageSettings.PreferredMetadataLanguage = sourceHasLanguageSettings.PreferredMetadataLanguage;
-            }
+            target.PreferredMetadataCountryCode = source.PreferredMetadataCountryCode;
+            target.PreferredMetadataLanguage = source.PreferredMetadataLanguage;
 
             var sourceHasDisplayOrder = source as IHasDisplayOrder;
             var targetHasDisplayOrder = target as IHasDisplayOrder;

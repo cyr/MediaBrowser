@@ -15,22 +15,41 @@
         ApiClient.getJSON(ApiClient.getUrl("Channels", query)).done(function (result) {
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
 
             var html = '';
 
-            updateFilterControls(page);
+            var view = 'Thumb';
 
-            html = LibraryBrowser.getPosterViewHtml({
-                items: result.Items,
-                shape: "backdrop",
-                context: 'channels',
-                showTitle: true,
-                centerText: true,
-                preferThumb: true
-            });
+            if (view == "Thumb") {
 
-            $('#items', page).html(html).lazyChildren();
+                html = LibraryBrowser.getPosterViewHtml({
+                    items: result.Items,
+                    shape: "backdrop",
+                    context: 'channels',
+                    showTitle: true,
+                    lazy: true,
+                    centerText: true,
+                    preferThumb: true
+                });
+
+            }
+            else if (view == "ThumbCard") {
+
+                html = LibraryBrowser.getPosterViewHtml({
+                    items: result.Items,
+                    shape: "backdrop",
+                    preferThumb: true,
+                    context: 'channels',
+                    lazy: true,
+                    cardLayout: true,
+                    showTitle: true
+                });
+            }
+
+            var elem = page.querySelector('#items');
+            elem.innerHTML = html;
+            ImageLoader.lazyChildren(elem);
 
             LibraryBrowser.saveQueryValues('channels', query);
 
@@ -38,19 +57,32 @@
         });
     }
 
-    function updateFilterControls(page) {
+    function loadTab(page, index) {
 
+        switch (index) {
+
+            case 1:
+                LibraryBrowser.loadSavedQueryValues('channels', query);
+                reloadItems(page);
+                break;
+            default:
+                break;
+        }
     }
 
-    $(document).on('pagebeforeshow', "#channelsPage", function () {
+    $(document).on('pageinit', "#channelsPage", function () {
 
-        LibraryBrowser.loadSavedQueryValues('channels', query);
+        var page = this;
 
-        reloadItems(this);
+        var tabs = page.querySelector('paper-tabs');
+        var pages = page.querySelector('neon-animated-pages');
 
-    }).on('pageshow', "#channelsPage", function () {
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages, 'channels.html');
 
-        updateFilterControls(this);
+        $(pages).on('tabchange', function () {
+            loadTab(page, parseInt(this.selected));
+        });
+
     });
 
 })(jQuery, document);

@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Serialization;
 using ServiceStack;
 using System;
 using System.Collections.Generic;
@@ -16,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 using MimeTypes = MediaBrowser.Model.Net.MimeTypes;
 
 namespace MediaBrowser.Api.Playback.Dash
@@ -53,7 +55,7 @@ namespace MediaBrowser.Api.Playback.Dash
 
     public class MpegDashService : BaseHlsService
     {
-        public MpegDashService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, INetworkManager networkManager) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient)
+        public MpegDashService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, IJsonSerializer jsonSerializer, INetworkManager networkManager) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient, jsonSerializer)
         {
             NetworkManager = networkManager;
         }
@@ -173,7 +175,7 @@ namespace MediaBrowser.Api.Playback.Dash
 
                                 var workingDirectory = Path.Combine(Path.GetDirectoryName(playlistPath), (startNumber == -1 ? 0 : startNumber).ToString(CultureInfo.InvariantCulture));
                                 state.WaitForPath = Path.Combine(workingDirectory, Path.GetFileName(playlistPath));
-                                Directory.CreateDirectory(workingDirectory);
+                                FileSystem.CreateDirectory(workingDirectory);
                                 job = await StartFfMpeg(state, playlistPath, cancellationTokenSource, workingDirectory).ConfigureAwait(false);
                                 await WaitForMinimumDashSegmentCount(Path.Combine(workingDirectory, Path.GetFileName(playlistPath)), 1, cancellationTokenSource.Token).ConfigureAwait(false);
                             }
@@ -321,14 +323,13 @@ namespace MediaBrowser.Api.Playback.Dash
             }
         }
 
-        private static List<FileInfo> GetLastTranscodingFiles(string playlist, string segmentExtension, IFileSystem fileSystem, int count)
+        private static List<FileSystemMetadata> GetLastTranscodingFiles(string playlist, string segmentExtension, IFileSystem fileSystem, int count)
         {
             var folder = Path.GetDirectoryName(playlist);
 
             try
             {
-                return new DirectoryInfo(folder)
-                    .EnumerateFiles("*", SearchOption.AllDirectories)
+				return fileSystem.GetFiles(folder)
                     .Where(i => string.Equals(i.Extension, segmentExtension, StringComparison.OrdinalIgnoreCase))
                     .OrderByDescending(fileSystem.GetLastWriteTimeUtc)
                     .Take(count)
@@ -336,7 +337,7 @@ namespace MediaBrowser.Api.Playback.Dash
             }
             catch (DirectoryNotFoundException)
             {
-                return new List<FileInfo>();
+                return new List<FileSystemMetadata>();
             }
         }
 
@@ -347,20 +348,20 @@ namespace MediaBrowser.Api.Playback.Dash
             if (requestedIndex == -1)
             {
                 var path = Path.Combine(folder, "0", "stream" + representationId + "-" + "init" + segmentExtension);
-                return File.Exists(path) ? path : null;
+				return FileSystem.FileExists(path) ? path : null;
             }
 
             try
             {
-                foreach (var subfolder in new DirectoryInfo(folder).EnumerateDirectories().ToList())
+                foreach (var subfolder in FileSystem.GetDirectoryPaths(folder).ToList())
                 {
-                    var subfolderName = Path.GetFileNameWithoutExtension(subfolder.FullName);
+                    var subfolderName = Path.GetFileNameWithoutExtension(subfolder);
                     int startNumber;
                     if (int.TryParse(subfolderName, NumberStyles.Any, UsCulture, out startNumber))
                     {
                         var segmentIndex = requestedIndex - startNumber + 1;
                         var path = Path.Combine(folder, subfolderName, "stream" + representationId + "-" + segmentIndex.ToString("00000", CultureInfo.InvariantCulture) + segmentExtension);
-                        if (File.Exists(path))
+						if (FileSystem.FileExists(path))
                         {
                             return path;
                         }
@@ -377,9 +378,9 @@ namespace MediaBrowser.Api.Playback.Dash
 
         protected override string GetAudioArguments(StreamState state)
         {
-            var codec = state.OutputAudioCodec;
+            var codec = GetAudioEncoder(state);
 
-            if (codec.Equals("copy", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(codec, "copy", StringComparison.OrdinalIgnoreCase))
             {
                 return "-codec:a:0 copy";
             }
@@ -407,7 +408,7 @@ namespace MediaBrowser.Api.Playback.Dash
 
         protected override string GetVideoArguments(StreamState state)
         {
-            var codec = state.OutputVideoCodec;
+            var codec = GetVideoEncoder(state);
 
             var args = "-codec:v:0 " + codec;
 

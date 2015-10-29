@@ -6,13 +6,13 @@ using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Naming.Common;
-using MediaBrowser.Naming.IO;
 using MediaBrowser.Naming.TV;
 using MediaBrowser.Server.Implementations.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Library.Resolvers.TV
 {
@@ -100,7 +100,7 @@ namespace MediaBrowser.Server.Implementations.Library.Resolvers.TV
         }
 
         public static bool IsSeriesFolder(string path,
-            IEnumerable<FileSystemInfo> fileSystemChildren,
+            IEnumerable<FileSystemMetadata> fileSystemChildren,
             IDirectoryService directoryService,
             IFileSystem fileSystem,
             ILogger logger,
@@ -111,11 +111,11 @@ namespace MediaBrowser.Server.Implementations.Library.Resolvers.TV
             {
                 var attributes = child.Attributes;
 
-                if ((attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
-                {
-                    //logger.Debug("Igoring series file or folder marked hidden: {0}", child.FullName);
-                    continue;
-                }
+                //if ((attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
+                //{
+                //    //logger.Debug("Igoring series file or folder marked hidden: {0}", child.FullName);
+                //    continue;
+                //}
 
                 // Can't enforce this because files saved by Bitcasa are always marked System
                 //if ((attributes & FileAttributes.System) == FileAttributes.System)
@@ -126,7 +126,7 @@ namespace MediaBrowser.Server.Implementations.Library.Resolvers.TV
 
                 if ((attributes & FileAttributes.Directory) == FileAttributes.Directory)
                 {
-                    if (IsSeasonFolder(child.FullName, isTvContentType))
+                    if (IsSeasonFolder(child.FullName, isTvContentType, libraryManager))
                     {
                         //logger.Debug("{0} is a series because of season folder {1}.", path, child.FullName);
                         return true;
@@ -153,7 +153,7 @@ namespace MediaBrowser.Server.Implementations.Library.Resolvers.TV
                         }
 
                         var episodeResolver = new Naming.TV.EpisodeResolver(namingOptions, new PatternsLogger());
-                        var episodeInfo = episodeResolver.Resolve(fullName, FileInfoType.File, false);
+                        var episodeInfo = episodeResolver.Resolve(fullName, false, false);
                         if (episodeInfo != null && episodeInfo.EpisodeNumber.HasValue)
                         {
                             return true;
@@ -189,10 +189,13 @@ namespace MediaBrowser.Server.Implementations.Library.Resolvers.TV
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="isTvContentType">if set to <c>true</c> [is tv content type].</param>
+        /// <param name="libraryManager">The library manager.</param>
         /// <returns><c>true</c> if [is season folder] [the specified path]; otherwise, <c>false</c>.</returns>
-        private static bool IsSeasonFolder(string path, bool isTvContentType)
+        private static bool IsSeasonFolder(string path, bool isTvContentType, ILibraryManager libraryManager)
         {
-            var seasonNumber = new SeasonPathParser(new ExtendedNamingOptions(), new RegexProvider()).Parse(path, isTvContentType, isTvContentType).SeasonNumber;
+            var namingOptions = ((LibraryManager)libraryManager).GetNamingOptions();
+
+            var seasonNumber = new SeasonPathParser(namingOptions, new RegexProvider()).Parse(path, isTvContentType, isTvContentType).SeasonNumber;
 
             return seasonNumber.HasValue;
         }

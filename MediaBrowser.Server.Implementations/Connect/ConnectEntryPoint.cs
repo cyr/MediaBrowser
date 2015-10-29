@@ -1,13 +1,17 @@
-﻿using MediaBrowser.Common.Configuration;
+﻿using MediaBrowser.Common;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Connect;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Net;
 using System;
 using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Server.Implementations.Connect
 {
@@ -20,14 +24,18 @@ namespace MediaBrowser.Server.Implementations.Connect
         private readonly IConnectManager _connectManager;
 
         private readonly INetworkManager _networkManager;
+        private readonly IApplicationHost _appHost;
+        private readonly IFileSystem _fileSystem;
 
-        public ConnectEntryPoint(IHttpClient httpClient, IApplicationPaths appPaths, ILogger logger, INetworkManager networkManager, IConnectManager connectManager)
+        public ConnectEntryPoint(IHttpClient httpClient, IApplicationPaths appPaths, ILogger logger, INetworkManager networkManager, IConnectManager connectManager, IApplicationHost appHost, IFileSystem fileSystem)
         {
             _httpClient = httpClient;
             _appPaths = appPaths;
             _logger = logger;
             _networkManager = networkManager;
             _connectManager = connectManager;
+            _appHost = appHost;
+            _fileSystem = fileSystem;
         }
 
         public void Run()
@@ -37,30 +45,52 @@ namespace MediaBrowser.Server.Implementations.Connect
             _timer = new Timer(TimerCallback, null, TimeSpan.FromSeconds(5), TimeSpan.FromHours(3));
         }
 
+        private readonly string[] _ipLookups = { "http://bot.whatismyipaddress.com", "https://connect.emby.media/service/ip" };
+
         private async void TimerCallback(object state)
         {
-            try
+            var index = 0;
+
+            foreach (var ipLookupUrl in _ipLookups)
             {
-                using (var stream = await _httpClient.Get(new HttpRequestOptions
+                try
                 {
-                    Url = "http://bot.whatismyipaddress.com/"
+                    // Sometimes whatismyipaddress might fail, but it won't do us any good having users raise alarms over it.
+                    var logErrors = index > 0;
 
-                }).ConfigureAwait(false))
-                {
-                    using (var reader = new StreamReader(stream))
+#if DEBUG
+                    logErrors = true;
+#endif
+                    using (var stream = await _httpClient.Get(new HttpRequestOptions
                     {
-                        var address = await reader.ReadToEndAsync().ConfigureAwait(false);
+                        Url = ipLookupUrl,
+                        UserAgent = "Emby/" + _appHost.ApplicationVersion,
+                        LogErrors = logErrors
 
-                        if (IsValid(address))
+                    }).ConfigureAwait(false))
+                    {
+                        using (var reader = new StreamReader(stream))
                         {
-                            ((ConnectManager) _connectManager).OnWanAddressResolved(address);
-                            CacheAddress(address);
+                            var address = await reader.ReadToEndAsync().ConfigureAwait(false);
+
+                            if (IsValid(address, ipLookupUrl))
+                            {
+                                ((ConnectManager)_connectManager).OnWanAddressResolved(address);
+                                CacheAddress(address);
+                                return;
+                            }
                         }
                     }
                 }
-            }
-            catch
-            {
+                catch (HttpException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Error getting connection info", ex);
+                }
+
+                index++;
             }
         }
 
@@ -75,8 +105,8 @@ namespace MediaBrowser.Server.Implementations.Connect
 
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, address, Encoding.UTF8);
+                _fileSystem.CreateDirectory(Path.GetDirectoryName(path));
+                _fileSystem.WriteAllText(path, address, Encoding.UTF8);
             }
             catch (Exception ex)
             {
@@ -90,9 +120,9 @@ namespace MediaBrowser.Server.Implementations.Connect
 
             try
             {
-                var endpoint = File.ReadAllText(path, Encoding.UTF8);
+                var endpoint = _fileSystem.ReadAllText(path, Encoding.UTF8);
 
-                if (IsValid(endpoint))
+                if (IsValid(endpoint, "cache"))
                 {
                     ((ConnectManager)_connectManager).OnWanAddressResolved(endpoint);
                 }
@@ -107,10 +137,17 @@ namespace MediaBrowser.Server.Implementations.Connect
             }
         }
 
-        private bool IsValid(string address)
+        private bool IsValid(string address, string source)
         {
             IPAddress ipAddress;
-            return IPAddress.TryParse(address, out ipAddress);
+            var valid = IPAddress.TryParse(address, out ipAddress);
+
+            if (!valid)
+            {
+                _logger.Error("{0} is not a valid ip address. Source: {1}", address, source);
+            }
+
+            return valid;
         }
 
         public void Dispose()

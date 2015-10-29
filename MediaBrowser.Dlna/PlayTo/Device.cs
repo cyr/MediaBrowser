@@ -296,7 +296,7 @@ namespace MediaBrowser.Dlna.PlayTo
             }
 
             var post = AvCommands.BuildPost(command, service.ServiceType, url, dictionary);
-            await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, post, header)
+            await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, post, header: header)
                 .ConfigureAwait(false);
 
             await Task.Delay(50).ConfigureAwait(false);
@@ -463,10 +463,10 @@ namespace MediaBrowser.Dlna.PlayTo
 
             if (service == null)
             {
-                throw new InvalidOperationException("Unable to find service");
+                return;
             }
 
-            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType))
+            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType), true)
                 .ConfigureAwait(false);
 
             if (result == null || result.Document == null)
@@ -496,10 +496,10 @@ namespace MediaBrowser.Dlna.PlayTo
 
             if (service == null)
             {
-                throw new InvalidOperationException("Unable to find service");
+                return;
             }
 
-            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType))
+            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType), true)
                 .ConfigureAwait(false);
 
             if (result == null || result.Document == null)
@@ -521,7 +521,7 @@ namespace MediaBrowser.Dlna.PlayTo
             if (service == null)
                 return null;
 
-            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, AvCommands.BuildPost(command, service.ServiceType))
+            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, AvCommands.BuildPost(command, service.ServiceType), false)
                 .ConfigureAwait(false);
 
             if (result == null || result.Document == null)
@@ -558,7 +558,7 @@ namespace MediaBrowser.Dlna.PlayTo
                 throw new InvalidOperationException("Unable to find service");
             }
 
-            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType))
+            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType), false)
                 .ConfigureAwait(false);
 
             if (result == null || result.Document == null)
@@ -589,7 +589,7 @@ namespace MediaBrowser.Dlna.PlayTo
                 throw new InvalidOperationException("Unable to find service");
             }
 
-            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType))
+            var result = await new SsdpHttpClient(_httpClient, _config).SendCommandAsync(Properties.BaseUrl, service, command.Name, RendererCommands.BuildPost(command, service.ServiceType), false)
                 .ConfigureAwait(false);
 
             if (result == null || result.Document == null)
@@ -635,15 +635,25 @@ namespace MediaBrowser.Dlna.PlayTo
             }
 
             XElement uPnpResponse;
-
+            
+            // Handle different variations sent back by devices
             try
             {
                 uPnpResponse = XElement.Parse(trackString);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.ErrorException("Unable to parse xml {0}", ex, trackString);
-                return new Tuple<bool, uBaseObject>(true, null);
+                // first try to add a root node with a dlna namesapce
+                try
+                {
+                    uPnpResponse = XElement.Parse("<data xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\">" + trackString + "</data>");
+                    uPnpResponse = uPnpResponse.Descendants().First();
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Unable to parse xml {0}", ex, trackString);
+                    return new Tuple<bool, uBaseObject>(true, null);
+                }
             }
 
             var e = uPnpResponse.Element(uPnpNamespaces.items);

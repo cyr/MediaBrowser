@@ -44,7 +44,7 @@
 
                     reloadItems(page);
 
-                });
+                }).fail(onApiFailure);
             }
 
         });
@@ -60,11 +60,9 @@
             sortBy: 'SortName'
 
         }).done(function (result) {
-
             Dashboard.hideLoadingMsg();
-
             showEpisodeCorrectionPopup(page, item, result.Items);
-        });
+        }).fail(onApiFailure);
 
     }
 
@@ -88,7 +86,7 @@
 
         seriesHtml = '<option value=""></option>' + seriesHtml;
 
-        $('#selectSeries', popup).html(seriesHtml).selectmenu('refresh');
+        $('#selectSeries', popup).html(seriesHtml);
     }
 
     function organizeFile(page, id) {
@@ -129,8 +127,7 @@
 
                     reloadItems(page);
 
-                });
-
+                }).fail(onApiFailure);
             }
 
         });
@@ -160,7 +157,7 @@
 
             reloadItems(page);
 
-        });
+        }).fail(onApiFailure);
     }
 
     function reloadItems(page) {
@@ -173,7 +170,7 @@
             renderResults(page, result);
 
             Dashboard.hideLoadingMsg();
-        });
+        }).fail(onApiFailure);
 
     }
 
@@ -195,7 +192,7 @@
             status = Globalize.translate('StatusSuccess');
         }
 
-        if (enhance && enhance) {
+        if (enhance) {
 
             if (item.StatusMessage) {
 
@@ -216,16 +213,6 @@
             var html = '';
 
             html += '<tr>';
-
-            html += '<td class="organizerButtonCell">';
-
-
-            if (item.Status != 'Success') {
-                html += '<button data-resultid="' + item.Id + '" type="button" data-inline="true" data-icon="delete" data-mini="true" data-iconpos="notext" class="btnDeleteResult organizerButton" title="' + Globalize.translate('ButtonDeleteFile') + '">' + Globalize.translate('ButtonDeleteFile') + '</button>';
-                html += '<button data-resultid="' + item.Id + '" type="button" data-inline="true" data-icon="action" data-mini="true" data-iconpos="notext" class="btnProcessResult organizerButton" title="' + Globalize.translate('ButtonOrganizeFile') + '">' + Globalize.translate('ButtonOrganizeFile') + '</button>';
-            }
-
-            html += '</td>';
 
             html += '<td>';
 
@@ -257,6 +244,16 @@
             html += item.TargetPath || '';
             html += '</td>';
 
+            html += '<td class="organizerButtonCell">';
+
+
+            if (item.Status != 'Success') {
+                html += '<paper-icon-button data-resultid="' + item.Id + '" icon="folder" class="btnProcessResult organizerButton" title="' + Globalize.translate('ButtonOrganizeFile') + '"></paper-icon-button>';
+                html += '<paper-icon-button data-resultid="' + item.Id + '" icon="delete" class="btnDeleteResult organizerButton" title="' + Globalize.translate('ButtonDeleteFile') + '"></paper-icon-button>';
+            }
+
+            html += '</td>';
+
             html += '</tr>';
 
             return html;
@@ -285,8 +282,15 @@
             deleteOriginalFile(page, id);
         });
 
-        var pagingHtml = LibraryBrowser.getPagingHtml(query, result.TotalRecordCount, false, [], false);
-        $('.listTopPaging', page).html(pagingHtml).trigger('create');
+        var pagingHtml = LibraryBrowser.getQueryPagingHtml({
+            startIndex: query.StartIndex,
+            limit: query.Limit,
+            totalRecordCount: result.TotalRecordCount,
+            showLimit: false,
+            updatePageSizeSetting: false
+        });
+
+        $(page)[0].querySelector('.listTopPaging').innerHTML = pagingHtml;
 
         if (result.TotalRecordCount > query.Limit && result.TotalRecordCount > 50) {
             $('.listBottomPaging', page).html(pagingHtml).trigger('create');
@@ -326,6 +330,21 @@
         }
     }
 
+    function onApiFailure(e) {
+
+        Dashboard.hideLoadingMsg();
+
+        Dashboard.alert({
+            title: Globalize.translate('AutoOrganizeError'),
+            message: Globalize.translate('ErrorOrganizingFileWithErrorCode', e.getResponseHeader("X-Application-Error-Code"))
+        });
+    }
+
+    function onEpisodeCorrectionFormSubmit() {
+        submitEpisodeForm(this);
+        return false;
+    }
+
     $(document).on('pageinit', "#libraryFileOrganizerLogPage", function () {
 
         var page = this;
@@ -334,9 +353,11 @@
 
             ApiClient.clearOrganizationLog().done(function () {
                 reloadItems(page);
-            });
+            }).fail(onApiFailure);
 
         });
+
+        $('.episodeCorrectionForm').off('submit', onEpisodeCorrectionFormSubmit).on('submit', onEpisodeCorrectionFormSubmit);
 
     }).on('pageshow', "#libraryFileOrganizerLogPage", function () {
 
@@ -347,14 +368,14 @@
         // on here
         $('.btnOrganize', page).taskButton({
             mode: 'on',
-            progressElem: $('.organizeProgress', page),
+            progressElem: page.querySelector('.organizeProgress'),
             panel: $('.organizeTaskPanel', page),
             taskKey: 'AutoOrganize'
         });
 
         $(ApiClient).on("websocketmessage.autoorganizelog", onWebSocketMessage);
 
-    }).on('pagehide', "#libraryFileOrganizerLogPage", function () {
+    }).on('pagebeforehide', "#libraryFileOrganizerLogPage", function () {
 
         var page = this;
 
@@ -365,16 +386,7 @@
             mode: 'off'
         });
 
-        $(ApiClient).off(".autoorganizelog");
+        $(ApiClient).off("websocketmessage.autoorganizelog", onWebSocketMessage);
     });
-
-    window.OrganizerLogPage = {
-
-        onEpisodeCorrectionFormSubmit: function () {
-
-            submitEpisodeForm(this);
-            return false;
-        }
-    };
 
 })(jQuery, document, window);

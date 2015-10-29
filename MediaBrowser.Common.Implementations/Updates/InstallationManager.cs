@@ -19,6 +19,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Common.Implementations.Updates
 {
@@ -149,10 +150,12 @@ namespace MediaBrowser.Common.Implementations.Updates
         /// Gets all available packages.
         /// </summary>
         /// <param name="cancellationToken">The cancellation token.</param>
+        /// <param name="withRegistration">if set to <c>true</c> [with registration].</param>
         /// <param name="packageType">Type of the package.</param>
         /// <param name="applicationVersion">The application version.</param>
         /// <returns>Task{List{PackageInfo}}.</returns>
         public async Task<IEnumerable<PackageInfo>> GetAvailablePackages(CancellationToken cancellationToken,
+            bool withRegistration = true,
             PackageType? packageType = null,
             Version applicationVersion = null)
         {
@@ -163,13 +166,22 @@ namespace MediaBrowser.Common.Implementations.Updates
                 { "systemid", _applicationHost.SystemId }
             };
 
-            using (var json = await _httpClient.Post(MbAdmin.HttpsUrl + "service/package/retrieveall", data, cancellationToken).ConfigureAwait(false))
+            if (withRegistration)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                using (var json = await _httpClient.Post(MbAdmin.HttpsUrl + "service/package/retrieveall", data, cancellationToken).ConfigureAwait(false))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                var packages = _jsonSerializer.DeserializeFromStream<List<PackageInfo>>(json).ToList();
+                    var packages = _jsonSerializer.DeserializeFromStream<List<PackageInfo>>(json).ToList();
 
-                return FilterPackages(packages, packageType, applicationVersion);
+                    return FilterPackages(packages, packageType, applicationVersion);
+                }
+            }
+            else
+            {
+                var packages = await GetAvailablePackagesWithoutRegistrationInfo(cancellationToken).ConfigureAwait(false);
+
+                return FilterPackages(packages.ToList(), packageType, applicationVersion);
             }
         }
 
@@ -195,7 +207,7 @@ namespace MediaBrowser.Common.Implementations.Updates
                         cacheLength = TimeSpan.FromMinutes(3);
                         break;
                     default:
-                        cacheLength = TimeSpan.FromHours(3);
+                        cacheLength = TimeSpan.FromHours(24);
                         break;
                 }
 
@@ -542,7 +554,7 @@ namespace MediaBrowser.Common.Implementations.Updates
             if (packageChecksum != Guid.Empty) // support for legacy uploads for now
             {
                 using (var crypto = new MD5CryptoServiceProvider())
-                using (var stream = new BufferedStream(File.OpenRead(tempFile), 100000))
+				using (var stream = new BufferedStream(_fileSystem.OpenRead(tempFile), 100000))
                 {
                     var check = Guid.Parse(BitConverter.ToString(crypto.ComputeHash(stream)).Replace("-", String.Empty));
                     if (check != packageChecksum)
@@ -557,12 +569,12 @@ namespace MediaBrowser.Common.Implementations.Updates
             // Success - move it to the real target 
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(target));
-                File.Copy(tempFile, target, true);
+				_fileSystem.CreateDirectory(Path.GetDirectoryName(target));
+				_fileSystem.CopyFile(tempFile, target, true);
                 //If it is an archive - write out a version file so we know what it is
                 if (isArchive)
                 {
-                    File.WriteAllText(target + ".ver", package.versionStr);
+					File.WriteAllText(target + ".ver", package.versionStr);
                 }
             }
             catch (IOException e)

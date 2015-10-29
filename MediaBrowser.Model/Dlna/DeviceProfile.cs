@@ -34,7 +34,6 @@ namespace MediaBrowser.Model.Dlna
         public string ModelNumber { get; set; }
         public string ModelUrl { get; set; }
         public string SerialNumber { get; set; }
-        public bool IgnoreTranscodeByteRangeRequests { get; set; }
 
         public bool EnableAlbumArtInDidl { get; set; }
         public bool EnableSingleAlbumArtLimit { get; set; }
@@ -77,6 +76,8 @@ namespace MediaBrowser.Model.Dlna
         public bool RequiresPlainFolders { get; set; }
 
         public bool EnableMSMediaReceiverRegistrar { get; set; }
+        public bool IgnoreTranscodeByteRangeRequests { get; set; }
+        public bool EnableDlnaProtocol { get; set; }
 
         public XmlAttribute[] XmlRootAttributes { get; set; }
 
@@ -272,8 +273,6 @@ namespace MediaBrowser.Model.Dlna
         public ResponseProfile GetVideoMediaProfile(string container, 
             string audioCodec,
             string videoCodec,
-            int? audioBitrate,
-            int? audioChannels,
             int? width,
             int? height,
             int? bitDepth,
@@ -287,7 +286,8 @@ namespace MediaBrowser.Model.Dlna
             bool? isCabac,
             int? refFrames,
             int? numVideoStreams,
-            int? numAudioStreams)
+            int? numAudioStreams,
+            string videoCodecTag)
         {
             container = StringHelper.TrimStart((container ?? string.Empty), '.');
 
@@ -321,7 +321,7 @@ namespace MediaBrowser.Model.Dlna
                 var anyOff = false;
                 foreach (ProfileCondition c in i.Conditions)
                 {
-                    if (!conditionProcessor.IsVideoConditionSatisfied(c, audioBitrate, audioChannels, width, height, bitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isCabac, refFrames, numVideoStreams, numAudioStreams))
+                    if (!conditionProcessor.IsVideoConditionSatisfied(c, width, height, bitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isCabac, refFrames, numVideoStreams, numAudioStreams, videoCodecTag))
                     {
                         anyOff = true;
                         break;

@@ -11,6 +11,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Server.Implementations.Library.Validators
 {
@@ -29,17 +31,19 @@ namespace MediaBrowser.Server.Implementations.Library.Validators
         private readonly ILogger _logger;
 
         private readonly IServerConfigurationManager _config;
+        private readonly IFileSystem _fileSystem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PeopleValidator" /> class.
         /// </summary>
         /// <param name="libraryManager">The library manager.</param>
         /// <param name="logger">The logger.</param>
-        public PeopleValidator(ILibraryManager libraryManager, ILogger logger, IServerConfigurationManager config)
+        public PeopleValidator(ILibraryManager libraryManager, ILogger logger, IServerConfigurationManager config, IFileSystem fileSystem)
         {
             _libraryManager = libraryManager;
             _logger = logger;
             _config = config;
+            _fileSystem = fileSystem;
         }
 
         private bool DownloadMetadata(PersonInfo i, PeopleMetadataOptions options)
@@ -72,39 +76,6 @@ namespace MediaBrowser.Server.Implementations.Library.Validators
             return options.DownloadOtherPeopleMetadata;
         }
 
-        private IEnumerable<PersonInfo> GetPeopleToValidate(BaseItem item, PeopleMetadataOptions options)
-        {
-            return item.People.Where(i =>
-            {
-                if (i.IsType(PersonType.Actor))
-                {
-                    return options.DownloadActorMetadata;
-                }
-                if (i.IsType(PersonType.Director))
-                {
-                    return options.DownloadDirectorMetadata;
-                }
-                if (i.IsType(PersonType.Composer))
-                {
-                    return options.DownloadComposerMetadata;
-                }
-                if (i.IsType(PersonType.Writer))
-                {
-                    return options.DownloadWriterMetadata;
-                }
-                if (i.IsType(PersonType.Producer))
-                {
-                    return options.DownloadProducerMetadata;
-                }
-                if (i.IsType(PersonType.GuestStar))
-                {
-                    return options.DownloadGuestStarMetadata;
-                }
-
-                return options.DownloadOtherPeopleMetadata;
-            });
-        }
-
         /// <summary>
         /// Validates the people.
         /// </summary>
@@ -119,24 +90,31 @@ namespace MediaBrowser.Server.Implementations.Library.Validators
 
             var peopleOptions = _config.Configuration.PeopleMetadataOptions;
 
-            var people = _libraryManager.RootFolder.GetRecursiveChildren()
-                .SelectMany(i => i.People)
-                .Where(i => !string.IsNullOrWhiteSpace(i.Name))
-                .ToList();
+            var people = _libraryManager.GetAllPeople();
 
             var dict = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var person in people)
             {
-                bool current;
-                if (!dict.TryGetValue(person.Name, out current) || !current)
+                var isMetadataEnabled = DownloadMetadata(person, peopleOptions);
+
+                bool currentValue;
+                if (dict.TryGetValue(person.Name, out currentValue))
                 {
-                    dict[person.Name] = DownloadMetadata(person, peopleOptions);
+                    if (!currentValue && isMetadataEnabled)
+                    {
+                        dict[person.Name] = true;
+                    }
+                }
+                else
+                {
+                    dict[person.Name] = isMetadataEnabled;
                 }
             }
 
             var numComplete = 0;
-
+            var validIds = new List<Guid>();
+            
             foreach (var person in dict)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -145,13 +123,19 @@ namespace MediaBrowser.Server.Implementations.Library.Validators
                 {
                     var item = _libraryManager.GetPerson(person.Key);
 
-                    var options = new MetadataRefreshOptions
+                    validIds.Add(item.Id);
+
+                    var options = new MetadataRefreshOptions(_fileSystem)
                     {
-                         MetadataRefreshMode = person.Value ? MetadataRefreshMode.Default : MetadataRefreshMode.ValidationOnly,
-                         ImageRefreshMode = person.Value ? ImageRefreshMode.Default : ImageRefreshMode.ValidationOnly
+                        MetadataRefreshMode = person.Value ? MetadataRefreshMode.Default : MetadataRefreshMode.ValidationOnly,
+                        ImageRefreshMode = person.Value ? ImageRefreshMode.Default : ImageRefreshMode.ValidationOnly
                     };
 
                     await item.RefreshMetadata(options, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -164,6 +148,28 @@ namespace MediaBrowser.Server.Implementations.Library.Validators
                 percent /= people.Count;
 
                 progress.Report(100 * percent);
+            }
+
+            var allIds = _libraryManager.GetItemIds(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { typeof(Person).Name }
+            });
+
+            var invalidIds = allIds
+                .Except(validIds)
+                .ToList();
+
+            foreach (var id in invalidIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var item = _libraryManager.GetItemById(id);
+
+                await _libraryManager.DeleteItem(item, new DeleteOptions
+                {
+                    DeleteFileLocation = false
+
+                }).ConfigureAwait(false);
             }
 
             progress.Report(100);

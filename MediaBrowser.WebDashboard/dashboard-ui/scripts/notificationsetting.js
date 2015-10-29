@@ -1,7 +1,7 @@
 ﻿(function () {
 
     var notificationsConfigurationKey = "notifications";
-    
+
     function fillItems(elem, items, cssClass, idPrefix, currentList, isEnabledList) {
 
         var html = '<div data-role="controlgroup">';
@@ -90,7 +90,7 @@
 
             $('#txtTitle', page).val(notificationConfig.Title || typeInfo.DefaultTitle);
 
-            $('#selectUsers', page).val(notificationConfig.SendToUserMode).selectmenu('refresh').trigger('change');
+            $('#selectUsers', page).val(notificationConfig.SendToUserMode).trigger('change');
 
         });
     }
@@ -155,6 +155,12 @@
         });
     }
 
+    function onSubmit() {
+        var page = $(this).parents('.page');
+        save(page);
+        return false;
+    }
+
     $(document).on('pageinit', "#notificationSettingPage", function () {
 
         var page = this;
@@ -169,21 +175,13 @@
 
         });
 
+        $('.notificationSettingForm').off('submit', onSubmit).on('submit', onSubmit);
+
     }).on('pageshow', "#notificationSettingPage", function () {
 
         var page = this;
 
         reload(page);
     });
-
-    window.NotificationSettingPage = {
-
-        onSubmit: function () {
-
-            var page = $(this).parents('.page');
-            save(page);
-            return false;
-        }
-    };
 
 })(jQuery, window);

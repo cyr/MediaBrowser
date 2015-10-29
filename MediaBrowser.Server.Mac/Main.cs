@@ -21,6 +21,8 @@ using Microsoft.Win32;
 using MonoMac.AppKit;
 using MonoMac.Foundation;
 using MonoMac.ObjCRuntime;
+using CommonIO;
+using MediaBrowser.Server.Implementations.Logging;
 
 namespace MediaBrowser.Server.Mac
 {
@@ -89,7 +91,7 @@ namespace MediaBrowser.Server.Mac
 			// Allow all https requests
 			ServicePointManager.ServerCertificateValidationCallback = new RemoteCertificateValidationCallback(delegate { return true; });
 
-			var fileSystem = new CommonFileSystem(logManager.GetLogger("FileSystem"), false, true);
+			var fileSystem = new ManagedFileSystem(new PatternsLogger(logManager.GetLogger("FileSystem")), false, true);
 
 			var nativeApp = new NativeApp();
 
@@ -145,6 +147,39 @@ namespace MediaBrowser.Server.Mac
 			_logger.Info("AppController.Terminate");
 			MenuBarIcon.Instance.Terminate ();
 		}
+
+        public static void Restart()
+        {
+            _logger.Info("Disposing app host");
+            AppHost.Dispose();
+
+            _logger.Info("Starting new instance");
+
+            var args = Environment.GetCommandLineArgs()
+				.Skip(1)
+                .Select(NormalizeCommandLineArgument);
+
+            var commandLineArgsString = string.Join(" ", args.ToArray());
+			var module = Environment.GetCommandLineArgs().First();
+
+			_logger.Info ("Executable: {0}", module);
+			_logger.Info ("Arguments: {0}", commandLineArgsString);
+
+            Process.Start(module, commandLineArgsString);
+
+            _logger.Info("AppController.Terminate");
+            MenuBarIcon.Instance.Terminate();
+        }
+
+        private static string NormalizeCommandLineArgument(string arg)
+        {
+            if (arg.IndexOf(" ", StringComparison.OrdinalIgnoreCase) == -1)
+            {
+                return arg;
+            }
+
+            return "\"" + arg + "\"";
+        }
 
 		/// <summary>
 		/// Handles the UnhandledException event of the CurrentDomain control.

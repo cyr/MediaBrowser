@@ -28,6 +28,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Providers.MediaInfo
 {
@@ -46,10 +47,11 @@ namespace MediaBrowser.Providers.MediaInfo
         private readonly IServerConfigurationManager _config;
         private readonly ISubtitleManager _subtitleManager;
         private readonly IChapterManager _chapterManager;
+        private readonly ILibraryManager _libraryManager;
 
         private readonly CultureInfo _usCulture = new CultureInfo("en-US");
 
-        public FFProbeVideoInfo(ILogger logger, IIsoManager isoManager, IMediaEncoder mediaEncoder, IItemRepository itemRepo, IBlurayExaminer blurayExaminer, ILocalizationManager localization, IApplicationPaths appPaths, IJsonSerializer json, IEncodingManager encodingManager, IFileSystem fileSystem, IServerConfigurationManager config, ISubtitleManager subtitleManager, IChapterManager chapterManager)
+        public FFProbeVideoInfo(ILogger logger, IIsoManager isoManager, IMediaEncoder mediaEncoder, IItemRepository itemRepo, IBlurayExaminer blurayExaminer, ILocalizationManager localization, IApplicationPaths appPaths, IJsonSerializer json, IEncodingManager encodingManager, IFileSystem fileSystem, IServerConfigurationManager config, ISubtitleManager subtitleManager, IChapterManager chapterManager, ILibraryManager libraryManager)
         {
             _logger = logger;
             _isoManager = isoManager;
@@ -64,6 +66,7 @@ namespace MediaBrowser.Providers.MediaInfo
             _config = config;
             _subtitleManager = subtitleManager;
             _chapterManager = chapterManager;
+            _libraryManager = libraryManager;
         }
 
         public async Task<ItemUpdateType> ProbeVideo<T>(T item,
@@ -130,7 +133,7 @@ namespace MediaBrowser.Providers.MediaInfo
             return ItemUpdateType.MetadataImport;
         }
 
-        private const string SchemaVersion = "4";
+        private const string SchemaVersion = "6";
 
         private async Task<Model.MediaInfo.MediaInfo> GetMediaInfo(Video item,
             IIsoMount isoMount,
@@ -138,14 +141,14 @@ namespace MediaBrowser.Providers.MediaInfo
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var idString = item.Id.ToString("N");
-            var cachePath = Path.Combine(_appPaths.CachePath,
-                "ffprobe-video",
-                idString.Substring(0, 2), idString, "v" + SchemaVersion + _mediaEncoder.Version + item.DateModified.Ticks.ToString(_usCulture) + ".json");
+            //var idString = item.Id.ToString("N");
+            //var cachePath = Path.Combine(_appPaths.CachePath,
+            //    "ffprobe-video",
+            //    idString.Substring(0, 2), idString, "v" + SchemaVersion + _mediaEncoder.Version + item.DateModified.Ticks.ToString(_usCulture) + ".json");
 
             try
             {
-                return _json.DeserializeFromFile<Model.MediaInfo.MediaInfo>(cachePath);
+                //return _json.DeserializeFromFile<Model.MediaInfo.MediaInfo>(cachePath);
             }
             catch (FileNotFoundException)
             {
@@ -172,8 +175,8 @@ namespace MediaBrowser.Providers.MediaInfo
 
             }, cancellationToken).ConfigureAwait(false);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
-            _json.SerializeToFile(result, cachePath);
+            //Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+            //_json.SerializeToFile(result, cachePath);
 
             return result;
         }
@@ -188,8 +191,8 @@ namespace MediaBrowser.Providers.MediaInfo
             var mediaStreams = mediaInfo.MediaStreams;
 
             video.TotalBitrate = mediaInfo.Bitrate;
-            video.FormatName = (mediaInfo.Container ?? string.Empty)
-                .Replace("matroska", "mkv", StringComparison.OrdinalIgnoreCase);
+            //video.FormatName = (mediaInfo.Container ?? string.Empty)
+            //    .Replace("matroska", "mkv", StringComparison.OrdinalIgnoreCase);
 
             // For dvd's this may not always be accurate, so don't set the runtime if the item already has one
             var needToSetRuntime = video.VideoType != VideoType.Dvd || video.RunTimeTicks == null || video.RunTimeTicks.Value == 0;
@@ -219,6 +222,7 @@ namespace MediaBrowser.Providers.MediaInfo
             await AddExternalSubtitles(video, mediaStreams, options, cancellationToken).ConfigureAwait(false);
 
             FetchEmbeddedInfo(video, mediaInfo, options);
+            await FetchPeople(video, mediaInfo, options).ConfigureAwait(false);
 
             video.IsHD = mediaStreams.Any(i => i.Type == MediaStreamType.Video && i.Width.HasValue && i.Width.Value >= 1270);
 
@@ -370,24 +374,6 @@ namespace MediaBrowser.Providers.MediaInfo
                 }
             }
 
-            if (!video.LockedFields.Contains(MetadataFields.Cast))
-            {
-                if (video.People.Count == 0 || isFullRefresh)
-                {
-                    video.People.Clear();
-
-                    foreach (var person in data.People)
-                    {
-                        video.AddPerson(new PersonInfo
-                        {
-                            Name = person.Name,
-                            Type = person.Type,
-                            Role = person.Role
-                        });
-                    }
-                }
-            }
-
             if (!video.LockedFields.Contains(MetadataFields.Genres))
             {
                 if (video.Genres.Count == 0 || isFullRefresh)
@@ -458,6 +444,31 @@ namespace MediaBrowser.Providers.MediaInfo
             }
         }
 
+        private async Task FetchPeople(Video video, Model.MediaInfo.MediaInfo data, MetadataRefreshOptions options)
+        {
+            var isFullRefresh = options.MetadataRefreshMode == MetadataRefreshMode.FullRefresh;
+
+            if (!video.LockedFields.Contains(MetadataFields.Cast))
+            {
+                if (isFullRefresh || _libraryManager.GetPeople(video).Count == 0)
+                {
+                    var people = new List<PersonInfo>();
+
+                    foreach (var person in data.People)
+                    {
+                        PeopleHelper.AddPerson(people, new PersonInfo
+                        {
+                            Name = person.Name,
+                            Type = person.Type,
+                            Role = person.Role
+                        });
+                    }
+
+                    await _libraryManager.UpdatePeople(video, people);
+                }
+            }
+        }
+
         private SubtitleOptions GetOptions()
         {
             return _config.GetConfiguration<SubtitleOptions>("subtitles");
@@ -478,7 +489,8 @@ namespace MediaBrowser.Providers.MediaInfo
         {
             var subtitleResolver = new SubtitleResolver(_localization, _fileSystem);
 
-            var externalSubtitleStreams = subtitleResolver.GetExternalSubtitleStreams(video, currentStreams.Count, options.DirectoryService, false).ToList();
+            var startIndex = currentStreams.Count == 0 ? 0 : (currentStreams.Select(i => i.Index).Max() + 1);
+            var externalSubtitleStreams = subtitleResolver.GetExternalSubtitleStreams(video, startIndex, options.DirectoryService, false).ToList();
 
             var enableSubtitleDownloading = options.MetadataRefreshMode == MetadataRefreshMode.Default ||
                                             options.MetadataRefreshMode == MetadataRefreshMode.FullRefresh;
@@ -502,7 +514,7 @@ namespace MediaBrowser.Providers.MediaInfo
                 // Rescan
                 if (downloadedLanguages.Count > 0)
                 {
-                    externalSubtitleStreams = subtitleResolver.GetExternalSubtitleStreams(video, currentStreams.Count, options.DirectoryService, true).ToList();
+                    externalSubtitleStreams = subtitleResolver.GetExternalSubtitleStreams(video, startIndex, options.DirectoryService, true).ToList();
                 }
             }
 
@@ -696,7 +708,7 @@ namespace MediaBrowser.Providers.MediaInfo
 
             // Try to eliminate menus and intros by skipping all files at the front of the list that are less than the minimum size
             // Once we reach a file that is at least the minimum, return all subsequent ones
-            var allVobs = new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories)
+            var allVobs = _fileSystem.GetFiles(root)
                 .Where(file => string.Equals(file.Extension, ".vob", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(i => i.FullName)
                 .ToList();
@@ -722,7 +734,7 @@ namespace MediaBrowser.Providers.MediaInfo
                     return minSizeVobs.Count == 0 ? vobs.Select(i => i.FullName) : minSizeVobs.Select(i => i.FullName);
                 }
 
-                _logger.Debug("Could not determine vob file list for {0} using DvdLib. Will scan using file sizes.", video.Path);
+                _logger.Info("Could not determine vob file list for {0} using DvdLib. Will scan using file sizes.", video.Path);
             }
 
             var files = allVobs

@@ -19,22 +19,30 @@ namespace MediaBrowser.Server.Mac
         /// <summary>
         /// Restarts this instance.
         /// </summary>
-        public void Restart()
+		public virtual void Restart(StartupOptions options)
         {
-            
+            throw new NotImplementedException();
         }
 
         /// <summary>
         /// Determines whether this instance [can self restart].
         /// </summary>
         /// <returns><c>true</c> if this instance [can self restart]; otherwise, <c>false</c>.</returns>
-        public bool CanSelfRestart
+        public virtual bool CanSelfRestart
         {
             get
             {
                 return false;
             }
         }
+
+		public virtual bool SupportsLibraryMonitor
+		{
+			get
+			{
+				return false;
+			}
+		}
 
         /// <summary>
         /// Gets a value indicating whether this instance can self update.

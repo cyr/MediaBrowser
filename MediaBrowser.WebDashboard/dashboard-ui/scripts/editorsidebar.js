@@ -155,7 +155,7 @@
 
     function loadLiveTvChannels(service, openItems, callback) {
 
-        ApiClient.getLiveTvChannels({ ServiceName: service }).done(function (result) {
+        ApiClient.getLiveTvChannels({ ServiceName: service, AddCurrentProgram: false }).done(function (result) {
 
             var nodes = result.Items.map(function (i) {
 
@@ -258,11 +258,79 @@
 
         if (elem) {
             // commenting out for now because it's causing the whole window to scroll in chrome
-            //elem.scrollIntoView();
+            elem.scrollIntoView();
         }
     }
 
+    function loadJsTree() {
+
+        var deferred = DeferredBuilder.Deferred();
+
+        require([
+            'bower_components/jstree/dist/jstree.min'
+        ], function () {
+
+            Dashboard.importCss('thirdparty/jstree/themes/default/style.min.css');
+            deferred.resolve();
+        });
+        return deferred.promise();
+    }
+
     function initializeTree(page, currentUser, openItems, selectedId) {
+
+        loadJsTree().done(function () {
+            initializeTreeInternal(page, currentUser, openItems, selectedId);
+        });
+    }
+
+    function onNodeSelect(event, data) {
+        var node = data.node;
+
+        var eventData = {
+            id: node.id,
+            itemType: node.li_attr.itemtype
+        };
+
+        if (eventData.itemType != 'livetv' && eventData.itemType != 'mediafolders') {
+            $(this).trigger('itemclicked', [eventData]);
+        }
+    }
+
+    function onNodeOpen(event, data) {
+
+        var page = $(this).parents('.page')[0];
+        var node = data.node;
+
+        if (node.children && node.children) {
+            loadNodesToLoad(page, node);
+        }
+
+        if (node.li_attr && node.id != '#' && !node.li_attr.loadedFromServer) {
+
+            node.li_attr.loadedFromServer = true;
+
+            $.jstree.reference(".libraryTree", page).load_node(node.id, loadNodeCallback);
+        }
+    }
+
+    function onNodeLoad(event, data) {
+
+        var page = $(this).parents('.page')[0];
+        var node = data.node;
+
+        if (node.children && node.children) {
+            loadNodesToLoad(page, node);
+        }
+
+        if (node.li_attr && node.id != '#' && !node.li_attr.loadedFromServer) {
+
+            node.li_attr.loadedFromServer = true;
+
+            $.jstree.reference(".libraryTree", page).load_node(node.id, loadNodeCallback);
+        }
+    }
+
+    function initializeTreeInternal(page, currentUser, openItems, selectedId) {
 
         nodesToLoad = [];
         selectedNodeId = null;
@@ -286,50 +354,7 @@
                 }
             }
 
-        }).off('select_node.jstree').on('select_node.jstree', function (event, data) {
-
-            var node = data.node;
-
-            var eventData = {
-                id: node.id,
-                itemType: node.li_attr.itemtype
-            };
-
-            if (eventData.itemType != 'livetv' && eventData.itemType != 'mediafolders') {
-                $(this).trigger('itemclicked', [eventData]);
-            }
-
-        }).off('open_node.jstree').on('open_node.jstree', function (event, data) {
-
-            var node = data.node;
-
-            if (node.children && node.children) {
-                loadNodesToLoad(page, node);
-            }
-
-            if (node.li_attr && node.id != '#' && !node.li_attr.loadedFromServer) {
-
-                node.li_attr.loadedFromServer = true;
-
-                $.jstree.reference(".libraryTree", page).load_node(node.id, loadNodeCallback);
-            }
-
-        }).off('load_node.jstree').on('load_node.jstree', function (event, data) {
-
-            var node = data.node;
-
-            if (node.children && node.children) {
-                loadNodesToLoad(page, node);
-            }
-
-            if (node.li_attr && node.id != '#' && !node.li_attr.loadedFromServer) {
-
-                node.li_attr.loadedFromServer = true;
-
-                $.jstree.reference(".libraryTree", page).load_node(node.id, loadNodeCallback);
-            }
-
-        });
+        }).off('select_node.jstree', onNodeSelect).on('select_node.jstree', onNodeSelect).off('open_node.jstree', onNodeOpen).on('open_node.jstree', onNodeOpen).off('load_node.jstree', onNodeLoad).on('load_node.jstree', onNodeLoad);
     }
 
     function loadNodesToLoad(page, node) {
@@ -355,8 +380,8 @@
 
         if (selectedNodeId && node.children && node.children.indexOf(selectedNodeId) != -1) {
 
-            setTimeout(function() {
-                
+            setTimeout(function () {
+
                 scrollToNode($.mobile.activePage, selectedNodeId);
             }, 500);
         }
@@ -391,13 +416,15 @@
 
     }).on('pagebeforeshow', ".metadataEditorPage", function () {
 
-        window.MetadataEditor = new metadataEditor();
+        Dashboard.importCss('css/metadataeditor.css');
+
+    }).on('pagebeforeshow', ".metadataEditorPage", function () {
 
         var page = this;
 
         Dashboard.getCurrentUser().done(function (user) {
 
-            var id = MetadataEditor.currentItemId;
+            var id = getCurrentItemId();
 
             if (id) {
 
@@ -420,61 +447,28 @@
 
         var page = this;
 
-        $('.libraryTree', page).off('select_node.jstree');
+        $('.libraryTree', page).off('select_node.jstree', onNodeSelect).off('open_node.jstree', onNodeOpen).off('load_node.jstree', onNodeLoad);
 
     });
 
-    function metadataEditor() {
+    function getCurrentItemId() {
 
-        var self = this;
+        var url = window.location.hash || getWindowUrl();
 
-        function ensureInitialValues() {
+        return getParameterByName('id', url);
+    }
 
-            if (self.currentItemType || self.currentItemId) {
-                return;
-            }
-
-            var url = window.location.hash || getWindowUrl();
-
-            var id = getParameterByName('id', url);
-
-            if (id) {
-                self.currentItemId = id;
-                self.currentItemType = null;
-            }
-        };
-
-        self.getItemPromise = function () {
-
-            var currentItemType = self.currentItemType;
-            var currentItemId = self.currentItemId;
-
-            if (currentItemType == "TvChannel") {
-                return ApiClient.getLiveTvChannel(currentItemId);
-            }
+    window.MetadataEditor = {
+        getItemPromise: function() {
+            var currentItemId = getCurrentItemId();
 
             if (currentItemId) {
                 return ApiClient.getItem(Dashboard.getCurrentUserId(), currentItemId);
             }
 
             return ApiClient.getRootFolder(Dashboard.getCurrentUserId());
-        };
-
-        self.getEditQueryString = function (item) {
-
-            var query = "id=" + item.Id;
-
-            var context = getParameterByName('context');
-
-            if (context) {
-                query += "&context=" + context;
-            }
-
-            return query;
-        };
-
-        ensureInitialValues();
-    }
-
+        },
+        getCurrentItemId: getCurrentItemId
+    };
 
 })(jQuery, document, window);

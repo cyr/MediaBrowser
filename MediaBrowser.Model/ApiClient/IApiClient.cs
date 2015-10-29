@@ -320,32 +320,11 @@ namespace MediaBrowser.Model.ApiClient
         Task<ItemsResult> GetUserViews(string userId, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
-        /// Gets the instant mix from song async.
+        /// Gets the instant mix from item asynchronous.
         /// </summary>
         /// <param name="query">The query.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetInstantMixFromSongAsync(SimilarItemsQuery query);
-
-        /// <summary>
-        /// Gets the instant mix from album async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetInstantMixFromAlbumAsync(SimilarItemsQuery query);
-
-        /// <summary>
-        /// Gets the instant mix from artist async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetInstantMixFromArtistAsync(SimilarItemsQuery query);
-
-        /// <summary>
-        /// Gets the instant mix from music genre async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetInstantMixFromMusicGenreAsync(SimilarItemsQuery query);
+        /// <returns>Task&lt;ItemsResult&gt;.</returns>
+        Task<ItemsResult> GetInstantMixFromItemAsync(SimilarItemsQuery query);
 
         /// <summary>
         /// Gets the similar movies async.
@@ -353,39 +332,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="query">The query.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetSimilarMoviesAsync(SimilarItemsQuery query, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <summary>
-        /// Gets the similar trailers async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetSimilarTrailersAsync(SimilarItemsQuery query, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <summary>
-        /// Gets the similar series async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetSimilarSeriesAsync(SimilarItemsQuery query, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <summary>
-        /// Gets the similar albums async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetSimilarAlbumsAsync(SimilarItemsQuery query, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <summary>
-        /// Gets the similar games async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetSimilarGamesAsync(SimilarItemsQuery query, CancellationToken cancellationToken = default(CancellationToken));
+        Task<ItemsResult> GetSimilarItemsAsync(SimilarItemsQuery query, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the people async.
@@ -441,20 +388,6 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="query">The query.</param>
         /// <returns>Task{ItemsResult}.</returns>
         Task<ItemsResult> GetGenresAsync(ItemsByNameQuery query);
-
-        /// <summary>
-        /// Gets the music genres async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetMusicGenresAsync(ItemsByNameQuery query);
-
-        /// <summary>
-        /// Gets the game genres async.
-        /// </summary>
-        /// <param name="query">The query.</param>
-        /// <returns>Task{ItemsResult}.</returns>
-        Task<ItemsResult> GetGameGenresAsync(ItemsByNameQuery query);
 
         /// <summary>
         /// Gets the studios async.
@@ -930,22 +863,6 @@ namespace MediaBrowser.Model.ApiClient
         string GetImageUrl(ChannelInfoDto item, ImageOptions options);
 
         /// <summary>
-        /// Gets the image URL.
-        /// </summary>
-        /// <param name="item">The item.</param>
-        /// <param name="options">The options.</param>
-        /// <returns>System.String.</returns>
-        string GetImageUrl(RecordingInfoDto item, ImageOptions options);
-
-        /// <summary>
-        /// Gets the image URL.
-        /// </summary>
-        /// <param name="item">The item.</param>
-        /// <param name="options">The options.</param>
-        /// <returns>System.String.</returns>
-        string GetImageUrl(ProgramInfoDto item, ImageOptions options);
-
-        /// <summary>
         /// Gets the subtitle URL.
         /// </summary>
         /// <param name="options">The options.</param>
@@ -1077,7 +994,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="query">The query.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{QueryResult{RecordingInfoDto}}.</returns>
-        Task<QueryResult<RecordingInfoDto>> GetLiveTvRecordingsAsync(RecordingQuery query, CancellationToken cancellationToken = default(CancellationToken));
+        Task<QueryResult<BaseItemDto>> GetLiveTvRecordingsAsync(RecordingQuery query, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the live tv recording asynchronous.
@@ -1086,7 +1003,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="userId">The user identifier.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{RecordingInfoDto}.</returns>
-        Task<RecordingInfoDto> GetLiveTvRecordingAsync(string id, string userId, CancellationToken cancellationToken = default(CancellationToken));
+        Task<BaseItemDto> GetLiveTvRecordingAsync(string id, string userId, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the live tv recording groups asynchronous.
@@ -1094,7 +1011,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="query">The query.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{QueryResult{RecordingGroupDto}}.</returns>
-        Task<QueryResult<RecordingGroupDto>> GetLiveTvRecordingGroupsAsync(RecordingGroupQuery query, CancellationToken cancellationToken = default(CancellationToken));
+        Task<QueryResult<BaseItemDto>> GetLiveTvRecordingGroupsAsync(RecordingGroupQuery query, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the live tv recording group asynchronous.
@@ -1103,7 +1020,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="userId">The user identifier.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{RecordingGroupDto}.</returns>
-        Task<RecordingGroupDto> GetLiveTvRecordingGroupAsync(string id, string userId, CancellationToken cancellationToken = default(CancellationToken));
+        Task<BaseItemDto> GetLiveTvRecordingGroupAsync(string id, string userId, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the live tv timers asynchronous.
@@ -1119,7 +1036,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="query">The query.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{QueryResult{ProgramInfoDto}}.</returns>
-        Task<QueryResult<ProgramInfoDto>> GetLiveTvProgramsAsync(ProgramQuery query, CancellationToken cancellationToken = default(CancellationToken));
+        Task<QueryResult<BaseItemDto>> GetLiveTvProgramsAsync(ProgramQuery query, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the live tv program asynchronous.
@@ -1128,7 +1045,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="userId">The user identifier.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{ProgramInfoDto}.</returns>
-        Task<ProgramInfoDto> GetLiveTvProgramAsync(string id, string userId, CancellationToken cancellationToken = default(CancellationToken));
+        Task<BaseItemDto> GetLiveTvProgramAsync(string id, string userId, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the recommended live tv programs asynchronous.
@@ -1136,7 +1053,7 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="query">The query.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{QueryResult{ProgramInfoDto}}.</returns>
-        Task<QueryResult<ProgramInfoDto>> GetRecommendedLiveTvProgramsAsync(RecommendedProgramQuery query, CancellationToken cancellationToken = default(CancellationToken));
+        Task<QueryResult<BaseItemDto>> GetRecommendedLiveTvProgramsAsync(RecommendedProgramQuery query, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Creates the live tv timer asynchronous.
@@ -1209,14 +1126,6 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task.</returns>
         Task CancelLiveTvSeriesTimerAsync(string id, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <summary>
-        /// Deletes the live tv recording asynchronous.
-        /// </summary>
-        /// <param name="id">The identifier.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
-        Task DeleteLiveTvRecordingAsync(string id, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the default timer information.
@@ -1499,5 +1408,11 @@ namespace MediaBrowser.Model.ApiClient
         /// <param name="itemIds">The item ids.</param>
         /// <returns>Task.</returns>
         Task CancelSyncLibraryItems(string targetId, IEnumerable<string> itemIds);
+        /// <summary>
+        /// Gets the supported bitrate.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>Task&lt;System.Int32&gt;.</returns>
+        Task<int> GetSupportedBitrate(CancellationToken cancellationToken);
     }
 }

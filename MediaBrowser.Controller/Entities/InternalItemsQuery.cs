@@ -1,5 +1,6 @@
 ﻿using MediaBrowser.Model.Entities;
 using System;
+using System.Collections.Generic;
 
 namespace MediaBrowser.Controller.Entities
 {
@@ -39,9 +40,11 @@ namespace MediaBrowser.Controller.Entities
         public string NameStartsWithOrGreater { get; set; }
         public string NameStartsWith { get; set; }
         public string NameLessThan { get; set; }
+        public string NameContains { get; set; }
 
         public string Person { get; set; }
         public string[] PersonIds { get; set; }
+        public string[] ItemIds { get; set; }
         public string AdjacentTo { get; set; }
         public string[] PersonTypes { get; set; }
 
@@ -49,7 +52,6 @@ namespace MediaBrowser.Controller.Entities
         public bool? IsHD { get; set; }
         public bool? IsInBoxSet { get; set; }
         public bool? IsLocked { get; set; }
-        public bool? IsUnidentified { get; set; }
         public bool? IsPlaceHolder { get; set; }
         public bool? IsYearMismatched { get; set; }
 
@@ -73,6 +75,33 @@ namespace MediaBrowser.Controller.Entities
         public string[] Tags { get; set; }
         public string[] OfficialRatings { get; set; }
 
+        public DateTime? MinStartDate { get; set; }
+        public DateTime? MaxStartDate { get; set; }
+        public DateTime? MinEndDate { get; set; }
+        public DateTime? MaxEndDate { get; set; }
+        public bool? IsAiring { get; set; }
+
+        public bool? IsMovie { get; set; }
+        public bool? IsSports { get; set; }
+        public bool? IsKids { get; set; }
+
+        public int? MinPlayers { get; set; }
+        public int? MaxPlayers { get; set; }
+        public double? MinCriticRating { get; set; }
+        public double? MinCommunityRating { get; set; }
+       
+        public string[] ChannelIds { get; set; }
+
+        internal List<Guid> ItemIdsFromPersonFilters { get; set; }
+        public int? MaxParentalRating { get; set; }
+
+        public bool? IsCurrentSchema { get; set; }
+        public bool? HasDeadParentId { get; set; }
+        public bool? IsOffline { get; set; }
+        public LocationType? LocationType { get; set; }
+
+        public Guid? ParentId { get; set; }
+        
         public InternalItemsQuery()
         {
             Tags = new string[] { };
@@ -89,6 +118,8 @@ namespace MediaBrowser.Controller.Entities
             Years = new int[] { };
             PersonTypes = new string[] { };
             PersonIds = new string[] { };
+            ChannelIds = new string[] { };
+            ItemIds = new string[] { };
         }
     }
 }

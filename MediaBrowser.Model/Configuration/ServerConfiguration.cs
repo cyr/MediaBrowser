@@ -25,7 +25,7 @@ namespace MediaBrowser.Model.Configuration
         /// </summary>
         /// <value>The public HTTPS port.</value>
         public int PublicHttpsPort { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the HTTP server port number.
         /// </summary>
@@ -44,12 +44,6 @@ namespace MediaBrowser.Model.Configuration
         /// <value><c>true</c> if [use HTTPS]; otherwise, <c>false</c>.</value>
         public bool EnableHttps { get; set; }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether [enable user specific user views].
-        /// </summary>
-        /// <value><c>true</c> if [enable user specific user views]; otherwise, <c>false</c>.</value>
-        public bool EnableUserSpecificUserViews { get; set; }
-        
         /// <summary>
         /// Gets or sets the value pointing to the file system where the ssl certiifcate is located..
         /// </summary>
@@ -99,11 +93,23 @@ namespace MediaBrowser.Model.Configuration
         public bool EnableLocalizedGuids { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether [disable startup scan].
+        /// </summary>
+        /// <value><c>true</c> if [disable startup scan]; otherwise, <c>false</c>.</value>
+        public bool DisableStartupScan { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether [enable user views].
+        /// </summary>
+        /// <value><c>true</c> if [enable user views]; otherwise, <c>false</c>.</value>
+        public bool EnableUserViews { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether [enable library metadata sub folder].
         /// </summary>
         /// <value><c>true</c> if [enable library metadata sub folder]; otherwise, <c>false</c>.</value>
         public bool EnableLibraryMetadataSubFolder { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the preferred metadata language.
         /// </summary>
@@ -158,7 +164,7 @@ namespace MediaBrowser.Model.Configuration
         /// different directories and files.
         /// </summary>
         /// <value>The file watcher delay.</value>
-        public int RealtimeMonitorDelay { get; set; }
+        public int RealtimeLibraryMonitorDelay { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether [enable dashboard response caching].
@@ -187,7 +193,6 @@ namespace MediaBrowser.Model.Configuration
 
         public bool EnableAutomaticRestart { get; set; }
 
-        public bool EnableRealtimeMonitor { get; set; }
         public PathSubstitution[] PathSubstitutions { get; set; }
 
         public string ServerName { get; set; }
@@ -208,12 +213,28 @@ namespace MediaBrowser.Model.Configuration
         public bool EnableVideoArchiveFiles { get; set; }
         public int RemoteClientBitrateLimit { get; set; }
 
+        public bool DenyIFrameEmbedding { get; set; }
+
+        public AutoOnOff EnableLibraryMonitor { get; set; }
+
+        public int SharingExpirationDays { get; set; }
+
+        public bool DisableXmlSavers { get; set; }
+        public bool EnableWindowsShortcuts { get; set; }
+
+        public bool EnableVideoFrameByFrameAnalysis { get; set; }
+
+        public bool EnableDateLastRefresh { get; set; }
+
+        public string[] Migrations { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ServerConfiguration" /> class.
         /// </summary>
         public ServerConfiguration()
-            : base()
         {
+            Migrations = new string[] {};
+
             ImageSavingConvention = ImageSavingConvention.Compatible;
             PublicPort = 8096;
             PublicHttpsPort = 8920;
@@ -224,16 +245,19 @@ namespace MediaBrowser.Model.Configuration
             EnableDashboardResourceMinification = true;
 
             EnableAutomaticRestart = true;
+            DenyIFrameEmbedding = true;
 
             EnableUPnP = true;
 
+            SharingExpirationDays = 30;
             MinResumePct = 5;
             MaxResumePct = 90;
 
             // 5 minutes
             MinResumeDurationSeconds = 300;
 
-            RealtimeMonitorDelay = 30;
+            EnableLibraryMonitor = AutoOnOff.Auto;
+            RealtimeLibraryMonitorDelay = 40;
 
             EnableInternetProviders = true;
             FindInternetTrailers = true;
@@ -250,21 +274,12 @@ namespace MediaBrowser.Model.Configuration
 
             SeasonZeroDisplayName = "Specials";
 
-            EnableRealtimeMonitor = true;
-
             UICulture = "en-us";
 
             PeopleMetadataOptions = new PeopleMetadataOptions();
 
             InsecureApps9 = new[]
             {
-                "Chromecast",
-                "iOS",
-                "Unknown app",
-                "MediaPortal",
-                "Media Portal",
-                "iPad",
-                "iPhone",
                 "Windows Phone"
             };
 
@@ -279,7 +294,7 @@ namespace MediaBrowser.Model.Configuration
                     {
                         new ImageOption
                         {
-                            Limit = 3,
+                            Limit = 1,
                             MinWidth = 1280,
                             Type = ImageType.Backdrop
                         },
@@ -306,7 +321,59 @@ namespace MediaBrowser.Model.Configuration
 
                         new ImageOption
                         {
+                            Limit = 0,
+                            Type = ImageType.Banner
+                        },
+
+                        new ImageOption
+                        {
                             Limit = 1,
+                            Type = ImageType.Thumb
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            Type = ImageType.Logo
+                        }
+                    }
+                },
+
+                new MetadataOptions(1, 1280)
+                {
+                    ItemType = "MusicVideo",
+                    ImageOptions = new []
+                    {
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            MinWidth = 1280,
+                            Type = ImageType.Backdrop
+                        },
+
+                        // Don't download this by default as it's rarely used.
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Art
+                        },
+
+                        // Don't download this by default as it's rarely used.
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Disc
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            Type = ImageType.Primary
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 0,
                             Type = ImageType.Banner
                         },
 
@@ -331,7 +398,7 @@ namespace MediaBrowser.Model.Configuration
                     {
                         new ImageOption
                         {
-                            Limit = 2,
+                            Limit = 1,
                             MinWidth = 1280,
                             Type = ImageType.Backdrop
                         },
@@ -376,7 +443,7 @@ namespace MediaBrowser.Model.Configuration
                     {
                         new ImageOption
                         {
-                            Limit = 1,
+                            Limit = 0,
                             MinWidth = 1280,
                             Type = ImageType.Backdrop
                         },
@@ -416,11 +483,102 @@ namespace MediaBrowser.Model.Configuration
                         {
                             Limit = 0,
                             Type = ImageType.Art
+                        },
+
+                        // Don't download this by default
+                        // Generally not used
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Logo
                         }
                     }
                 },
 
-                new MetadataOptions(0, 1280) {ItemType = "Season"}
+                new MetadataOptions(1, 1280)
+                {
+                    ItemType = "BoxSet",
+                    ImageOptions = new []
+                    {
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            MinWidth = 1280,
+                            Type = ImageType.Backdrop
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            Type = ImageType.Primary
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            Type = ImageType.Thumb
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            Type = ImageType.Logo
+                        },
+
+                        // Don't download this by default as it's rarely used.
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Art
+                        },
+
+                        // Don't download this by default as it's rarely used.
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Disc
+                        },
+
+                        // Don't download this by default as it's rarely used.
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Banner
+                        }
+                    }
+                },
+
+                new MetadataOptions(0, 1280)
+                {
+                    ItemType = "Season",
+                    ImageOptions = new []
+                    {
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            MinWidth = 1280,
+                            Type = ImageType.Backdrop
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 1,
+                            Type = ImageType.Primary
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Banner
+                        },
+
+                        new ImageOption
+                        {
+                            Limit = 0,
+                            Type = ImageType.Thumb
+                        }
+                    }
+                }
             };
         }
     }

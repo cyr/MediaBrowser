@@ -1,8 +1,6 @@
 ﻿using MediaBrowser.Common.IO;
-using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Dlna;
@@ -10,6 +8,7 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using System;
 using System.IO;
+using CommonIO;
 
 namespace MediaBrowser.MediaEncoding.Encoder
 {

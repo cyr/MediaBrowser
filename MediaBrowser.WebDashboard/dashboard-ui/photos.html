@@ -4,20 +4,52 @@
     <title>Emby</title>
 </head>
 <body>
-    <div id="photosPage" data-role="page" class="page libraryPage">
+    <div id="photosPage" data-role="page" data-dom-cache="true" class="page libraryPage pageWithAbsoluteTabs" data-require="scripts/photos">
 
-        <div class="libraryViewNav scopedLibraryViewNav">
-            <a href="photos.html" class="ui-btn-active lnkPhotoAlbums">${TabAlbums}</a>
-            <a href="photos.html?context=photos-photos" class="lnkPhotos">${TabPhotos}</a>
-            <a href="photos.html?context=photos-videos" class="lnkVideos">${TabVideos}</a>
+        <div class="libraryViewNav scopedLibraryViewNav libraryViewNavWithMinHeight">
+            <paper-tabs hidescrollbuttons noink>
+                <paper-tab>${TabAlbums}</paper-tab>
+                <paper-tab>${TabPhotos}</paper-tab>
+                <paper-tab>${TabVideos}</paper-tab>
+            </paper-tabs>
+            <div class="legacyTabs">
+                <a href="photos.html" class="lnkPhotoAlbums">${TabAlbums}</a>
+                <a href="photos.html?tab=1" class="lnkPhotos">${TabPhotos}</a>
+                <a href="photos.html?tab=2" class="lnkVideos">${TabVideos}</a>
+            </div>
         </div>
 
-        <div data-role="content">
-            <div class="viewSettings">
-                <div class="listTopPaging">
+        <neon-animated-pages>
+            <neon-animatable>
+                <div class="pageTabContent albumTabContent">
+                    <div class="viewSettings">
+                        <div class="listTopPaging">
+                        </div>
+                    </div>
+                    <div class="itemsContainer paddedItemsContainer" style="text-align:center;"></div>
                 </div>
+            </neon-animatable>
+            <div class="pageTabContent photoTabContent">
+                <div class="viewSettings">
+                    <div class="listTopPaging">
+                    </div>
+                </div>
+                <div class="itemsContainer paddedItemsContainer" style="text-align:center;"></div>
             </div>
-            <div id="items" class="itemsContainer paddedItemsContainer" style="text-align:center;"></div>
+            <neon-animatable>
+            </neon-animatable>
+            <neon-animatable>
+                <div class="pageTabContent videoTabContent">
+                    <div class="viewSettings">
+                        <div class="listTopPaging">
+                        </div>
+                    </div>
+                    <div class="itemsContainer paddedItemsContainer" style="text-align:center;"></div>
+                </div>
+            </neon-animatable>
+        </neon-animated-pages>
+
+        <div data-role="content">
         </div>
     </div>
 </body>

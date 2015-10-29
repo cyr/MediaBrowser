@@ -13,10 +13,12 @@ using ServiceStack;
 using ServiceStack.Web;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
+using CommonIO;
+using WebMarkupMin.Core.Minifiers;
 
 namespace MediaBrowser.WebDashboard.Api
 {
@@ -52,6 +54,7 @@ namespace MediaBrowser.WebDashboard.Api
     [Route("/dashboard/Package", "GET")]
     public class GetDashboardPackage
     {
+        public string Mode { get; set; }
     }
 
     /// <summary>
@@ -134,7 +137,7 @@ namespace MediaBrowser.WebDashboard.Api
         {
             var page = ServerEntryPoint.Instance.PluginConfigurationPages.First(p => p.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase));
 
-            return ResultFactory.GetStaticResult(Request, page.Plugin.Version.ToString().GetMD5(), null, null, MimeTypes.GetMimeType("page.html"), () => GetPackageCreator().ModifyHtml(page.GetHtmlStream(), null, false));
+            return ResultFactory.GetStaticResult(Request, page.Plugin.Version.ToString().GetMD5(), null, null, MimeTypes.GetMimeType("page.html"), () => GetPackageCreator().ModifyHtml(page.GetHtmlStream(), null, _appHost.ApplicationVersion.ToString(), null, false));
         }
 
         /// <summary>
@@ -196,11 +199,11 @@ namespace MediaBrowser.WebDashboard.Api
 
             var contentType = MimeTypes.GetMimeType(path);
 
-            var isHtml = IsHtml(path);
-
-            if (isHtml && !_serverConfigurationManager.Configuration.IsStartupWizardCompleted)
+            // Bounce them to the startup wizard if it hasn't been completed yet
+            if (!_serverConfigurationManager.Configuration.IsStartupWizardCompleted && path.IndexOf("wizard", StringComparison.OrdinalIgnoreCase) == -1 && GetPackageCreator().IsCoreHtml(path))
             {
-                if (path.IndexOf("wizard", StringComparison.OrdinalIgnoreCase) == -1)
+                // But don't redirect if an html import is being requested.
+                if (path.IndexOf("vulcanize", StringComparison.OrdinalIgnoreCase) == -1 && path.IndexOf("bower_components", StringComparison.OrdinalIgnoreCase) == -1)
                 {
                     Request.Response.Redirect("wizardstart.html");
                     return null;
@@ -252,7 +255,7 @@ namespace MediaBrowser.WebDashboard.Api
             var minify = _serverConfigurationManager.Configuration.EnableDashboardResourceMinification;
 
             return GetPackageCreator()
-                .GetResource(path, localizationCulture, _appHost.ApplicationVersion.ToString(), minify);
+                .GetResource(path, null, localizationCulture, _appHost.ApplicationVersion.ToString(), minify);
         }
 
         private PackageCreator GetPackageCreator()
@@ -270,6 +273,12 @@ namespace MediaBrowser.WebDashboard.Api
             return Path.GetExtension(path).EndsWith("html", StringComparison.OrdinalIgnoreCase);
         }
 
+        private void CopyFile(string src, string dst)
+        {
+			_fileSystem.CreateDirectory(Path.GetDirectoryName(dst));
+			_fileSystem.CopyFile(src, dst, true);
+        }
+
         public async Task<object> Get(GetDashboardPackage request)
         {
             var path = Path.Combine(_serverConfigurationManager.ApplicationPaths.ProgramDataPath,
@@ -281,49 +290,157 @@ namespace MediaBrowser.WebDashboard.Api
             }
             catch (IOException)
             {
-                
+
             }
 
             var creator = GetPackageCreator();
 
             CopyDirectory(creator.DashboardUIPath, path);
 
-            var culture = "en-US";
+            string culture = null;
 
-            var appVersion = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+            var appVersion = _appHost.ApplicationVersion.ToString();
 
-            await DumpHtml(creator.DashboardUIPath, path, culture, appVersion);
-            await DumpJs(creator.DashboardUIPath, path, culture, appVersion);
+            var mode = request.Mode;
 
-            await DumpFile("scripts/all.js", Path.Combine(path, "scripts", "all.js"), culture, appVersion).ConfigureAwait(false);
-            await DumpFile("css/all.css", Path.Combine(path, "css", "all.css"), culture, appVersion).ConfigureAwait(false);
- 
+            if (string.Equals(mode, "cordova", StringComparison.OrdinalIgnoreCase))
+            {
+                // Overwrite certain files with cordova specific versions
+                var cordovaVersion = Path.Combine(path, "cordova", "registrationservices.js");
+				_fileSystem.CopyFile(cordovaVersion, Path.Combine(path, "scripts", "registrationservices.js"), true);
+				_fileSystem.DeleteFile(cordovaVersion);
+
+                // Delete things that are unneeded in an attempt to keep the output as trim as possible
+				_fileSystem.DeleteDirectory(Path.Combine(path, "css", "images", "tour"), true);
+				_fileSystem.DeleteDirectory(Path.Combine(path, "apiclient", "alt"), true);
+
+				_fileSystem.DeleteFile(Path.Combine(path, "thirdparty", "jquerymobile-1.4.5", "jquery.mobile-1.4.5.min.map"));
+
+				_fileSystem.DeleteDirectory(Path.Combine(path, "bower_components"), true);
+				_fileSystem.DeleteDirectory(Path.Combine(path, "thirdparty", "viblast"), true);
+
+                // But we do need this
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "webcomponentsjs", "webcomponents-lite.js"), Path.Combine(path, "bower_components", "webcomponentsjs", "webcomponents-lite.js"));
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "webcomponentsjs", "webcomponents-lite.min.js"), Path.Combine(path, "bower_components", "webcomponentsjs", "webcomponents-lite.min.js"));
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "velocity", "velocity.min.js"), Path.Combine(path, "bower_components", "velocity", "velocity.min.js"));
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "requirejs", "require.js"), Path.Combine(path, "bower_components", "requirejs", "require.js"));
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "fastclick", "lib", "fastclick.js"), Path.Combine(path, "bower_components", "fastclick", "lib", "fastclick.js"));
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "jquery", "dist", "jquery.min.js"), Path.Combine(path, "bower_components", "jquery", "dist", "jquery.min.js"));
+
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "jstree", "dist", "jstree.min.js"), Path.Combine(path, "bower_components", "jstree", "dist", "jstree.min.js"));
+                
+                CopyDirectory(Path.Combine(creator.DashboardUIPath, "bower_components", "swipebox", "src", "css"), Path.Combine(path, "bower_components", "swipebox", "src", "css"));
+                CopyDirectory(Path.Combine(creator.DashboardUIPath, "bower_components", "swipebox", "src", "js"), Path.Combine(path, "bower_components", "swipebox", "src", "js"));
+                CopyDirectory(Path.Combine(creator.DashboardUIPath, "bower_components", "swipebox", "src", "img"), Path.Combine(path, "bower_components", "swipebox", "src", "img"));
+
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "hammerjs", "hammer.min.js"), Path.Combine(path, "bower_components", "hammerjs", "hammer.min.js"));
+
+                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "Sortable", "Sortable.min.js"), Path.Combine(path, "bower_components", "Sortable", "Sortable.min.js"));
+            }
+            
+            MinifyCssDirectory(Path.Combine(path, "css"));
+            MinifyJsDirectory(Path.Combine(path, "scripts"));
+            MinifyJsDirectory(Path.Combine(path, "apiclient"));
+            MinifyJsDirectory(Path.Combine(path, "voice"));
+
+            await DumpHtml(creator.DashboardUIPath, path, mode, culture, appVersion);
+            await DumpJs(creator.DashboardUIPath, path, mode, culture, appVersion);
+
+            await DumpFile("scripts/all.js", Path.Combine(path, "scripts", "all.js"), mode, culture, appVersion).ConfigureAwait(false);
+            await DumpFile("css/all.css", Path.Combine(path, "css", "all.css"), mode, culture, appVersion).ConfigureAwait(false);
+
             return "";
         }
 
-        private async Task DumpHtml(string source, string destination, string culture, string appVersion)
+        private void MinifyCssDirectory(string path)
+        {
+            foreach (var file in Directory.GetFiles(path, "*.css", SearchOption.AllDirectories))
+            {
+                try
+                {
+					var text = _fileSystem.ReadAllText(file, Encoding.UTF8);
+
+                    var result = new KristensenCssMinifier().Minify(text, false, Encoding.UTF8);
+
+                    if (result.Errors.Count > 0)
+                    {
+                        Logger.Error("Error minifying css: " + result.Errors[0].Message);
+                    }
+                    else
+                    {
+                        text = result.MinifiedContent;
+						_fileSystem.WriteAllText(file, text, Encoding.UTF8);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.ErrorException("Error minifying css", ex);
+                }
+            }
+        }
+
+        private void MinifyJsDirectory(string path)
+        {
+            foreach (var file in Directory.GetFiles(path, "*.js", SearchOption.AllDirectories))
+            {
+                try
+                {
+					var text = _fileSystem.ReadAllText(file, Encoding.UTF8);
+
+                    var result = new CrockfordJsMinifier().Minify(text, false, Encoding.UTF8);
+
+                    if (result.Errors.Count > 0)
+                    {
+                        Logger.Error("Error minifying javascript: " + result.Errors[0].Message);
+                    }
+                    else
+                    {
+                        text = result.MinifiedContent;
+						_fileSystem.WriteAllText(file, text, Encoding.UTF8);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.ErrorException("Error minifying css", ex);
+                }
+            }
+        }
+
+        private async Task DumpHtml(string source, string destination, string mode, string culture, string appVersion)
         {
             foreach (var file in Directory.GetFiles(source, "*.html", SearchOption.TopDirectoryOnly))
             {
                 var filename = Path.GetFileName(file);
 
-                await DumpFile(filename, Path.Combine(destination, filename), culture, appVersion).ConfigureAwait(false);
+                await DumpFile(filename, Path.Combine(destination, filename), mode, culture, appVersion).ConfigureAwait(false);
+            }
+
+            var excludeFiles = new List<string>();
+
+            if (string.Equals(mode, "cordova", StringComparison.OrdinalIgnoreCase))
+            {
+                excludeFiles.Add("supporterkey.html");
+            }
+
+            foreach (var file in excludeFiles)
+            {
+				_fileSystem.DeleteFile(Path.Combine(destination, file));
             }
         }
 
-        private async Task DumpJs(string source, string destination, string culture, string appVersion)
+        private async Task DumpJs(string source, string mode, string destination, string culture, string appVersion)
         {
             foreach (var file in Directory.GetFiles(source, "*.js", SearchOption.TopDirectoryOnly))
             {
                 var filename = Path.GetFileName(file);
 
-                await DumpFile("scripts/" + filename, Path.Combine(destination, "scripts", filename), culture, appVersion).ConfigureAwait(false);
+                await DumpFile("scripts/" + filename, Path.Combine(destination, "scripts", filename), mode, culture, appVersion).ConfigureAwait(false);
             }
         }
 
-        private async Task DumpFile(string resourceVirtualPath, string destinationFilePath, string culture, string appVersion)
+        private async Task DumpFile(string resourceVirtualPath, string destinationFilePath, string mode, string culture, string appVersion)
         {
-            using (var stream = await GetPackageCreator().GetResource(resourceVirtualPath, culture, appVersion, true).ConfigureAwait(false))
+            using (var stream = await GetPackageCreator().GetResource(resourceVirtualPath, mode, culture, appVersion, true).ConfigureAwait(false))
             {
                 using (var fs = _fileSystem.GetFileStream(destinationFilePath, FileMode.Create, FileAccess.Write, FileShare.Read))
                 {
@@ -334,17 +451,17 @@ namespace MediaBrowser.WebDashboard.Api
 
         private void CopyDirectory(string source, string destination)
         {
-            Directory.CreateDirectory(destination);
+			_fileSystem.CreateDirectory(destination);
 
             //Now Create all of the directories
             foreach (string dirPath in Directory.GetDirectories(source, "*",
                 SearchOption.AllDirectories))
-                Directory.CreateDirectory(dirPath.Replace(source, destination));
+				_fileSystem.CreateDirectory(dirPath.Replace(source, destination));
 
             //Copy all the files & Replaces any files with the same name
             foreach (string newPath in Directory.GetFiles(source, "*.*",
                 SearchOption.AllDirectories))
-                File.Copy(newPath, newPath.Replace(source, destination), true);
+				_fileSystem.CopyFile(newPath, newPath.Replace(source, destination), true);
         }
     }
 

@@ -7,8 +7,6 @@ namespace MediaBrowser.Model.Dlna
     public class ConditionProcessor
     {
         public bool IsVideoConditionSatisfied(ProfileCondition condition,
-            int? audioBitrate,
-            int? audioChannels,
             int? width,
             int? height,
             int? bitDepth,
@@ -22,16 +20,11 @@ namespace MediaBrowser.Model.Dlna
             bool? isCabac,
             int? refFrames,
             int? numVideoStreams,
-            int? numAudioStreams)
+            int? numAudioStreams,
+            string videoCodecTag)
         {
             switch (condition.Property)
             {
-                case ProfileConditionValue.AudioProfile:
-                    // TODO: Implement
-                    return true;
-                case ProfileConditionValue.Has64BitOffsets:
-                    // TODO: Implement
-                    return true;
                 case ProfileConditionValue.IsAnamorphic:
                     return IsConditionSatisfied(condition, isAnamorphic);
                 case ProfileConditionValue.IsCabac:
@@ -42,12 +35,10 @@ namespace MediaBrowser.Model.Dlna
                     return IsConditionSatisfied(condition, videoLevel);
                 case ProfileConditionValue.VideoProfile:
                     return IsConditionSatisfied(condition, videoProfile);
+                case ProfileConditionValue.VideoCodecTag:
+                    return IsConditionSatisfied(condition, videoCodecTag);
                 case ProfileConditionValue.PacketLength:
                     return IsConditionSatisfied(condition, packetLength);
-                case ProfileConditionValue.AudioBitrate:
-                    return IsConditionSatisfied(condition, audioBitrate);
-                case ProfileConditionValue.AudioChannels:
-                    return IsConditionSatisfied(condition, audioChannels);
                 case ProfileConditionValue.VideoBitDepth:
                     return IsConditionSatisfied(condition, bitDepth);
                 case ProfileConditionValue.VideoBitrate:
@@ -65,7 +56,7 @@ namespace MediaBrowser.Model.Dlna
                 case ProfileConditionValue.VideoTimestamp:
                     return IsConditionSatisfied(condition, timestamp);
                 default:
-                    throw new ArgumentException("Unexpected condition on video file: " + condition.Property);
+                    return true;
             }
         }
 

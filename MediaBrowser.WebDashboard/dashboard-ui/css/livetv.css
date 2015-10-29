@@ -1,4 +1,29 @@
-﻿
+﻿.guideTabContent {
+    background: #161616;
+}
+
+.tvGuide {
+    text-align: left;
+}
+
+.tvGuideHeader {
+    white-space: nowrap;
+    position: fixed;
+    top: 95px;
+    left: 0;
+    z-index: 100;
+    max-width: 100%;
+}
+
+.neon-animating .tvGuideHeader {
+    position: static;
+}
+
+.tvGuideHeader.headroom--unpinned {
+    -webkit-transform: translateY(-98px);
+    transform: translateY(-98px);
+}
+
 .tvProgramSectionHeader {
     margin: 0;
 }
@@ -12,7 +37,7 @@
 }
 
 .detailSectionHeader + .tvProgram {
-    border-top: 1px solid #404040;
+    border-top: 6px solid #161616;
     margin-top: 1px;
 }
 
@@ -25,7 +50,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    border-bottom: 1px solid #404040;
+    border-bottom: 6px solid #161616;
 }
 
 .tvProgramTimeSlotInner {
@@ -35,12 +60,13 @@
 .tvProgramInfo {
     vertical-align: middle;
     padding: .5em .5em;
-    border-bottom: 1px solid #404040;
+    border-bottom: 6px solid #161616;
 }
 
 .tvProgramTimeSlot + .tvProgramInfo {
     margin-left: 80px;
-    border-left: 1px solid #404040;
+    border-left: 6px solid #161616;
+    position: relative;
 }
 
 .tvProgramCurrentTimeSlot {
@@ -69,28 +95,28 @@
     color: yellow;
 }
 
-.sportsProgramInfo {
-    background-color: #0F2624;
-    border-bottom: 2px solid #0A7C33;
+.programAccent {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
 }
 
-.newsProgramInfo {
-    background-color: #211A32;
-    border-bottom: 2px solid #523378;
+.sportsProgramInfo .programAccent {
+    background-color: #0A7C33;
 }
 
-.movieProgramInfo {
-    background-color: #271A21;
-    border-bottom: 2px solid #A43913;
+.newsProgramInfo .programAccent {
+    background-color: #523378;
 }
 
-.childProgramInfo {
-    background-color: #092345;
-    border-bottom: 2px solid #0B487D;
+.movieProgramInfo .programAccent {
+    background-color: #A43913;
 }
 
-.tvProgram:hover, .tvProgram:hover .tvProgramInfo {
-    background-color: #4d90fe;
+.childProgramInfo .programAccent {
+    background-color: #0B487D;
 }
 
 .timerCircle {
@@ -99,7 +125,6 @@
     height: 12px;
     border-radius: 50%;
     background: #cc0000;
-    vertical-align: top;
     border: 1px solid #cc3333;
     margin-left: 1em;
 }
@@ -138,7 +163,6 @@
 
 .timeslotHeaders {
     white-space: nowrap;
-    overflow-x: scroll;
 }
 
 .mobileGuide .timeslotHeaders {
@@ -149,7 +173,7 @@
     white-space: nowrap;
     position: relative;
     margin: 0 auto;
-    margin-top: 50px;
+    margin-top: 44px;
 }
 
 .mobileGuide .programContainer {
@@ -158,13 +182,12 @@
 
 .channelPrograms {
     white-space: nowrap;
-    height: 55px;
-    border-bottom: 1px solid #404040;
+    height: 61px;
     position: relative;
 }
 
 .channelPrograms, .timeslotHeadersInner {
-    width: 8000px;
+    width: 12000px;
 }
 
 .timeslotHeader {
@@ -177,10 +200,6 @@
     font-size: 16px;
 }
 
-.channelTimeslotHeader .accentButton {
-    font-size: 15px;
-}
-
 .channelTimeslotHeader .timeslotHeaderInner {
     padding-top: .4em;
 }
@@ -188,17 +207,25 @@
 .channelHeaderCell, .channelTimeslotHeader {
     overflow: hidden;
     text-overflow: ellipsis;
-    border-bottom: 1px solid #404040;
-    border-right: 1px solid #404040;
-    width: 189px;
+    border-right: 1px solid #161616;
+    width: 199px;
+    background: #303030;
+}
+
+.channelHeaderCell {
+    border-bottom: 0 !important;
+}
+
+.channelHeaderCellContainer + .channelHeaderCellContainer .channelHeaderCell {
+    border-top: 6px solid #161616;
 }
 
 .channelTimeslotHeader {
-    border-right: 1px solid #38c;
+    border-right-color: #52B54B;
 }
 
 .channelTimeslotHeader, .timeslotHeader {
-    background: #38c;
+    background: #52B54B;
 }
 
 .timeslotHeader, .channelTimeslotHeader {
@@ -209,28 +236,27 @@
     padding: .35em .5em .5em;
     display: block;
     text-decoration: none;
-    font-weight: 300 !important;
+    font-weight: 400 !important;
     color: #fff !important;
     position: relative;
 }
 
-.channelHeaderCell:hover {
-    background-color: #38c;
+.pointerInput .channelHeaderCell:hover {
+    background-color: #444;
 }
 
 .channelList {
     float: left;
     font-size: 16px;
-    font-weight: 300;
+    font-weight: 400;
 }
 
 .programGrid {
     padding-bottom: 4px;
-    overflow-x: scroll;
 }
 
 .programGrid, .timeslotHeaders {
-    margin-left: 190px;
+    margin-left: 200px;
 }
 
 .timeslotHeader {
@@ -239,23 +265,17 @@
 
 .programCell {
     position: absolute;
-    top: 1px;
-    bottom: 1px;
-}
-
-.programCellInner {
-    border-left: 1px solid #404040;
+    top: 0;
+    bottom: 6px;
+    border-left: 6px solid #161616;
+    background-color: #212121;
     display: block;
-    height: 100%;
     color: #fff !important;
     text-decoration: none;
     font-weight: 400 !important;
+    font-size: 14px;
     overflow: hidden;
 }
-
-    .programCellInner:hover {
-        background-color: #38c;
-    }
 
 .timeslotCellInner {
     position: absolute;
@@ -274,11 +294,12 @@
 }
 
 .guideProgramName {
-    padding: .55em .5em .35em;
+    padding: .5em .5em .35em;
 }
 
 .guideProgramTime {
     padding: 0 .5em .35em;
+    color: #bbb;
 }
 
 .guideChannelInfo {
@@ -289,16 +310,33 @@
 }
 
 .guideChannelImage {
-    max-width: 60px;
-    max-height: 35px;
+    width: 60px;
+    height: 35px;
     position: absolute;
     right: 7px;
     top: 7px;
+    background-size: contain;
+    background-position: right center;
+    background-repeat: no-repeat;
+}
+
+@media (max-width: 1920px) {
+
+    .channelPrograms, .timeslotHeadersInner {
+        width: 10000px;
+    }
+}
+
+@media (max-width: 1600px) {
+
+    .channelPrograms, .timeslotHeadersInner {
+        width: 8000px;
+    }
 }
 
 @media (max-width: 600px) {
 
-    .guideChannelImage {
+    .guideChannelInfoWithImage {
         display: none;
     }
 
@@ -322,7 +360,7 @@
         width: 6500px;
     }
 
-    .channelList, .channelTimeslotHeader .accentButton  {
+    .channelList {
         font-size: 14px;
     }
 
@@ -350,4 +388,29 @@
 
 .channelList, .programGrid {
     height: auto !important;
+}
+
+.itemOverlayContent {
+    width: 200px;
+}
+
+@media (min-width: 800px) {
+
+    .itemOverlayContent {
+        width: 300px;
+    }
+}
+
+@media (min-width: 1000px) {
+
+    .itemOverlayContent {
+        width: 400px;
+    }
+}
+
+@media (min-width: 1200px) {
+
+    .itemOverlayContent {
+        width: 500px;
+    }
 }

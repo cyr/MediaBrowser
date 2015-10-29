@@ -13,10 +13,10 @@
             $('#txtSupporterKey', page).val(info.SupporterKey);
 
             if (info.SupporterKey && !info.IsMBSupporter) {
-                $('#txtSupporterKey', page).addClass("invalidEntry");
+                page.querySelector('#txtSupporterKey').classList.add('invalidEntry');
                 $('.notSupporter', page).show();
             } else {
-                $('#txtSupporterKey', page).removeClass("invalidEntry");
+                page.querySelector('#txtSupporterKey').classList.remove('invalidEntry');
                 $('.notSupporter', page).hide();
             }
 
@@ -78,7 +78,7 @@
         };
 
         var url = "http://mb3admin.com/admin/service/supporter/linkKeys";
-        console.log(url);
+        Logger.log(url);
         $.post(url, info).done(function (res) {
             var result = JSON.parse(res);
             Dashboard.hideLoadingMsg();
@@ -87,7 +87,7 @@
             } else {
                 Dashboard.showError(result.ErrorMessage);
             }
-            console.log(result);
+            Logger.log(result);
 
         });
 
@@ -102,7 +102,7 @@
         var email = $('#txtEmail', form).val();
 
         var url = "http://mb3admin.com/admin/service/supporter/retrievekey?email=" + email;
-        console.log(url);
+        Logger.log(url);
         $.post(url).done(function (res) {
             var result = JSON.parse(res);
             Dashboard.hideLoadingMsg();
@@ -111,7 +111,7 @@
             } else {
                 Dashboard.showError(result.ErrorMessage);
             }
-            console.log(result);
+            Logger.log(result);
 
         });
 
@@ -134,7 +134,7 @@ $(document).on('pageshow', "#supporterKeyPage", SupporterKeyPage.onPageShow);
 
             return '<option value="' + u.ConnectUserId + '">' + u.Name + '</option>';
 
-        }).join('')).selectmenu('refresh');
+        }).join(''));
     }
 
     function addUser(page, id) {
@@ -255,6 +255,18 @@ $(document).on('pageshow', "#supporterKeyPage", SupporterKeyPage.onPageShow);
 
     }
 
+    function loadUserInfo(page) {
+
+        ApiClient.getJSON(ApiClient.getUrl('System/SupporterInfo')).done(function (info) {
+
+            if (info.IsActiveSupporter) {
+                $('.supporterContainer', page).addClass('hide');
+            } else {
+                $('.supporterContainer', page).removeClass('hide');
+            }
+        });
+    }
+
     $(document).on('pageinit', "#supporterKeyPage", function () {
 
         var page = this;
@@ -262,10 +274,18 @@ $(document).on('pageshow', "#supporterKeyPage", SupporterKeyPage.onPageShow);
             showAddUserForm(page);
         });
 
+        $('#supporterKeyForm').on('submit', SupporterKeyPage.updateSupporterKey);
+        $('#lostKeyForm').on('submit', SupporterKeyPage.retrieveSupporterKey);
+        $('#linkKeysForm').on('submit', SupporterKeyPage.linkSupporterKeys);
+        $('.popupAddUserForm').on('submit', SupporterKeyPage.onAddConnectUserSubmit).on('submit', SupporterKeyPage.onAddConnectUserSubmit);
+
+        $('.benefits', page).html(Globalize.translate('HeaderSupporterBenefit', '<a href="http://emby.media/premiere" target="_blank">', '</a>'));
+
     }).on('pageshow', "#supporterKeyPage", function () {
 
         var page = this;
         loadConnectSupporters(page);
+        loadUserInfo(page);
     });
 
     window.SupporterKeyPage.onAddConnectUserSubmit = function () {

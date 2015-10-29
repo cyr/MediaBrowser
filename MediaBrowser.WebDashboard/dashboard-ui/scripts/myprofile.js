@@ -11,7 +11,7 @@
         ApiClient.getUser(userId).done(function (user) {
 
             $('.username', page).html(user.Name);
-            $('#uploadUserImage', page).val('').trigger('change');
+            Events.trigger($('#uploadUserImage', page).val('')[0], 'change');
 
             Dashboard.setPageTitle(user.Name);
 
@@ -61,7 +61,7 @@
 
         Dashboard.hideLoadingMsg();
 
-        var page = $.mobile.activePage;
+        var page = $($.mobile.activePage)[0];
 
         reloadUser(page);
     }
@@ -204,6 +204,9 @@
 
             });
         });
+
+        $('.newImageForm').off('submit', MyProfilePage.onImageSubmit).on('submit', MyProfilePage.onImageSubmit);
+
     });
 
 
@@ -243,7 +246,7 @@
                 $('#btnResetEasyPassword', page).hide();
             }
 
-            $('#chkEnableLocalEasyPassword', page).checked(user.Configuration.EnableLocalPassword).checkboxradio('refresh');
+            page.querySelector('.chkEnableLocalEasyPassword').checked = user.Configuration.EnableLocalPassword;
         });
 
         $('#txtCurrentPassword', page).val('');
@@ -274,7 +277,7 @@
 
         ApiClient.getUser(userId).done(function (user) {
 
-            user.Configuration.EnableLocalPassword = $('#chkEnableLocalEasyPassword', page).checked();
+            user.Configuration.EnableLocalPassword = page.querySelector('.chkEnableLocalEasyPassword').checked;
 
             ApiClient.updateUserConfiguration(user.Id, user.Configuration).done(function () {
 
@@ -310,13 +313,13 @@
 
         self.onSubmit = function () {
 
-            var page = $.mobile.activePage;
+            var page = $($.mobile.activePage)[0];
 
             if ($('#txtNewPassword', page).val() != $('#txtNewPasswordConfirm', page).val()) {
 
                 Dashboard.showError(Globalize.translate('PasswordMatchError'));
             } else {
-                
+
                 Dashboard.showLoadingMsg();
                 savePassword(page);
             }
@@ -329,7 +332,7 @@
 
         self.onLocalAccessSubmit = function () {
 
-            var page = $.mobile.activePage;
+            var page = $($.mobile.activePage)[0];
 
             Dashboard.showLoadingMsg();
 
@@ -344,7 +347,7 @@
 
             var msg = Globalize.translate('PasswordResetConfirmation');
 
-            var page = $.mobile.activePage;
+            var page = $($.mobile.activePage)[0];
 
             Dashboard.confirm(msg, Globalize.translate('PasswordResetHeader'), function (result) {
 
@@ -374,7 +377,7 @@
 
             var msg = Globalize.translate('PinCodeResetConfirmation');
 
-            var page = $.mobile.activePage;
+            var page = $($.mobile.activePage)[0];
 
             Dashboard.confirm(msg, Globalize.translate('HeaderPinCodeReset'), function (result) {
 
@@ -403,7 +406,14 @@
 
     window.UpdatePasswordPage = new updatePasswordPage();
 
-    $(document).on('pageshow', ".userPasswordPage", function () {
+    $(document).on('pageinit', ".userPasswordPage", function () {
+
+        var page = this;
+
+        $('.updatePasswordForm').off('submit', UpdatePasswordPage.onSubmit).on('submit', UpdatePasswordPage.onSubmit);
+        $('.localAccessForm').off('submit', UpdatePasswordPage.onLocalAccessSubmit).on('submit', UpdatePasswordPage.onLocalAccessSubmit);
+
+    }).on('pageshow', ".userPasswordPage", function () {
 
         var page = this;
 

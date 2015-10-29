@@ -1,5 +1,4 @@
-﻿using System.Threading.Tasks;
-using MediaBrowser.Controller.Dto;
+﻿using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -12,6 +11,7 @@ using ServiceStack.Web;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace MediaBrowser.Api
 {
@@ -198,15 +198,15 @@ namespace MediaBrowser.Api
             return libraryManager.GetPerson(DeSlugPersonName(name, libraryManager));
         }
 
-        protected IList<BaseItem> GetAllLibraryItems(Guid? userId, IUserManager userManager, ILibraryManager libraryManager, string parentId, Func<BaseItem,bool> filter)
+        protected IList<BaseItem> GetAllLibraryItems(string userId, IUserManager userManager, ILibraryManager libraryManager, string parentId, Func<BaseItem,bool> filter)
         {
             if (!string.IsNullOrEmpty(parentId))
             {
                 var folder = (Folder)libraryManager.GetItemById(new Guid(parentId));
 
-                if (userId.HasValue)
+                if (!string.IsNullOrWhiteSpace(userId))
                 {
-                    var user = userManager.GetUserById(userId.Value);
+                    var user = userManager.GetUserById(userId);
 
                     if (user == null)
                     {
@@ -221,9 +221,9 @@ namespace MediaBrowser.Api
                 return folder
                     .GetRecursiveChildren(filter);
             }
-            if (userId.HasValue)
+            if (!string.IsNullOrWhiteSpace(userId))
             {
-                var user = userManager.GetUserById(userId.Value);
+                var user = userManager.GetUserById(userId);
 
                 if (user == null)
                 {
@@ -231,7 +231,7 @@ namespace MediaBrowser.Api
                 }
 
                 return userManager
-                    .GetUserById(userId.Value)
+                    .GetUserById(userId)
                     .RootFolder
                     .GetRecursiveChildren(user, filter)
                     .ToList();
@@ -344,11 +344,7 @@ namespace MediaBrowser.Api
                 return name;
             }
 
-            return libraryManager.RootFolder
-                .GetRecursiveChildren()
-                .SelectMany(i => i.People)
-                .Select(i => i.Name)
-                .DistinctNames()
+            return libraryManager.GetPeopleNames(new InternalPeopleQuery())
                 .FirstOrDefault(i =>
                 {
                     i = _dashReplaceChars.Aggregate(i, (current, c) => current.Replace(c, SlugChar));
@@ -364,7 +360,8 @@ namespace MediaBrowser.Api
             var first = pathInfo.GetArgumentValue<string>(0);
 
             // backwards compatibility
-            if (string.Equals(first, "mediabrowser", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(first, "mediabrowser", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(first, "emby", StringComparison.OrdinalIgnoreCase))
             {
                 index++;
             }

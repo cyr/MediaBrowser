@@ -1,5 +1,5 @@
 ﻿using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.LiveTv;
@@ -7,12 +7,11 @@ using MediaBrowser.Model.Users;
 using System;
 using System.Linq;
 using System.Runtime.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
+using MediaBrowser.Model.Entities;
 
 namespace MediaBrowser.Controller.LiveTv
 {
-    public class LiveTvProgram : BaseItem, ILiveTvItem, IHasLookupInfo<LiveTvProgramLookupInfo>
+    public class LiveTvProgram : BaseItem, ILiveTvItem, IHasLookupInfo<LiveTvProgramLookupInfo>, IHasStartDate, IHasProgramAttributes
     {
         /// <summary>
         /// Gets the user data key.
@@ -20,26 +19,18 @@ namespace MediaBrowser.Controller.LiveTv
         /// <returns>System.String.</returns>
         protected override string CreateUserDataKey()
         {
+            if (IsMovie)
+            {
+                var key = Movie.GetMovieUserDataKey(this);
+
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    return key;
+                }
+            }
             return GetClientTypeName() + "-" + Name;
         }
 
-        /// <summary>
-        /// Id of the program.
-        /// </summary>
-        public string ExternalId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the channel identifier.
-        /// </summary>
-        /// <value>The channel identifier.</value>
-        public string ExternalChannelId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the original air date.
-        /// </summary>
-        /// <value>The original air date.</value>
-        public DateTime? OriginalAirDate { get; set; }
-        
         /// <summary>
         /// Gets or sets the type of the channel.
         /// </summary>
@@ -49,13 +40,8 @@ namespace MediaBrowser.Controller.LiveTv
         /// <summary>
         /// The start date of the program, in UTC.
         /// </summary>
+        [IgnoreDataMember]
         public DateTime StartDate { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether this instance is hd.
-        /// </summary>
-        /// <value><c>true</c> if this instance is hd; otherwise, <c>false</c>.</value>
-        public bool? IsHD { get; set; }
 
         /// <summary>
         /// Gets or sets the audio.
@@ -67,12 +53,14 @@ namespace MediaBrowser.Controller.LiveTv
         /// Gets or sets a value indicating whether this instance is repeat.
         /// </summary>
         /// <value><c>true</c> if this instance is repeat; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsRepeat { get; set; }
 
         /// <summary>
         /// Gets or sets the episode title.
         /// </summary>
         /// <value>The episode title.</value>
+        [IgnoreDataMember]
         public string EpisodeTitle { get; set; }
 
         /// <summary>
@@ -82,63 +70,52 @@ namespace MediaBrowser.Controller.LiveTv
         public string ServiceName { get; set; }
 
         /// <summary>
-        /// Supply the image path if it can be accessed directly from the file system
-        /// </summary>
-        /// <value>The image path.</value>
-        public string ProviderImagePath { get; set; }
-
-        /// <summary>
-        /// Supply the image url if it can be downloaded
-        /// </summary>
-        /// <value>The image URL.</value>
-        public string ProviderImageUrl { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether this instance has image.
-        /// </summary>
-        /// <value><c>null</c> if [has image] contains no value, <c>true</c> if [has image]; otherwise, <c>false</c>.</value>
-        public bool? HasProviderImage { get; set; }
-
-        /// <summary>
         /// Gets or sets a value indicating whether this instance is movie.
         /// </summary>
         /// <value><c>true</c> if this instance is movie; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsMovie { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is sports.
         /// </summary>
         /// <value><c>true</c> if this instance is sports; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsSports { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is series.
         /// </summary>
         /// <value><c>true</c> if this instance is series; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsSeries { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is live.
         /// </summary>
         /// <value><c>true</c> if this instance is live; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsLive { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is news.
         /// </summary>
         /// <value><c>true</c> if this instance is news; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsNews { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is kids.
         /// </summary>
         /// <value><c>true</c> if this instance is kids; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsKids { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is premiere.
         /// </summary>
         /// <value><c>true</c> if this instance is premiere; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool IsPremiere { get; set; }
 
         /// <summary>
@@ -204,15 +181,6 @@ namespace MediaBrowser.Controller.LiveTv
             return "Program";
         }
 
-        public override Task UpdateToRepository(ItemUpdateType updateReason, CancellationToken cancellationToken)
-        {
-            DateLastSaved = DateTime.UtcNow;
-            
-            // Avoid library manager and keep out of in-memory cache
-            // Not great that this class has to know about that, but we'll improve that later.
-            return ItemRepository.SaveItem(this, cancellationToken);
-        }
-
         protected override bool GetBlockUnratedValue(UserPolicy config)
         {
             return config.BlockUnratedItems.Contains(UnratedItem.LiveTvProgram);
@@ -244,6 +212,21 @@ namespace MediaBrowser.Controller.LiveTv
             var info = GetItemLookupInfo<LiveTvProgramLookupInfo>();
             info.IsMovie = IsMovie; 
             return info;
+        }
+
+        [IgnoreDataMember]
+        public override bool SupportsPeople
+        {
+            get
+            {
+                // Optimization
+                if (IsNews || IsSports)
+                {
+                    return false;
+                }
+
+                return base.SupportsPeople;
+            }
         }
     }
 }

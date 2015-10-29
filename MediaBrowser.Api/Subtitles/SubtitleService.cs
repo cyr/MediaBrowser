@@ -15,7 +15,9 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 using MimeTypes = MediaBrowser.Model.Net.MimeTypes;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Api.Subtitles
 {
@@ -100,6 +102,7 @@ namespace MediaBrowser.Api.Subtitles
     }
 
     [Route("/Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/subtitles.m3u8", "GET", Summary = "Gets an HLS subtitle playlist.")]
+    [Authenticated]
     public class GetSubtitlePlaylist
     {
         /// <summary>
@@ -126,14 +129,16 @@ namespace MediaBrowser.Api.Subtitles
         private readonly ISubtitleEncoder _subtitleEncoder;
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly IProviderManager _providerManager;
+        private readonly IFileSystem _fileSystem;
 
-        public SubtitleService(ILibraryManager libraryManager, ISubtitleManager subtitleManager, ISubtitleEncoder subtitleEncoder, IMediaSourceManager mediaSourceManager, IProviderManager providerManager)
+        public SubtitleService(ILibraryManager libraryManager, ISubtitleManager subtitleManager, ISubtitleEncoder subtitleEncoder, IMediaSourceManager mediaSourceManager, IProviderManager providerManager, IFileSystem fileSystem)
         {
             _libraryManager = libraryManager;
             _subtitleManager = subtitleManager;
             _subtitleEncoder = subtitleEncoder;
             _mediaSourceManager = mediaSourceManager;
             _providerManager = providerManager;
+            _fileSystem = fileSystem;
         }
 
         public async Task<object> Get(GetSubtitlePlaylist request)
@@ -258,7 +263,7 @@ namespace MediaBrowser.Api.Subtitles
                     await _subtitleManager.DownloadSubtitles(video, request.SubtitleId, CancellationToken.None)
                         .ConfigureAwait(false);
 
-                    _providerManager.QueueRefresh(video.Id, new MetadataRefreshOptions());
+                    _providerManager.QueueRefresh(video.Id, new MetadataRefreshOptions(_fileSystem));
                 }
                 catch (Exception ex)
                 {

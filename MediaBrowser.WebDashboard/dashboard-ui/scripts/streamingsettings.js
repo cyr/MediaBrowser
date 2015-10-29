@@ -7,29 +7,50 @@
         Dashboard.hideLoadingMsg();
     }
 
+    function onSubmit() {
+        Dashboard.showLoadingMsg();
+
+        var form = this;
+
+        ApiClient.getServerConfiguration().done(function (config) {
+
+            config.RemoteClientBitrateLimit = parseInt(parseFloat(($('#txtRemoteClientBitrateLimit', form).val() || '0')) * 1000000);
+
+            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+        });
+
+        // Disable default form submission
+        return false;
+    }
+
     $(document).on('pageinit', "#streamingSettingsPage", function () {
 
         var page = this;
 
         $('#btnSelectTranscodingTempPath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                callback: function (path) {
+                picker.show({
 
-                    if (path) {
-                        $('#txtTranscodingTempPath', page).val(path);
-                    }
-                    picker.close();
-                },
+                    callback: function (path) {
 
-                header: Globalize.translate('HeaderSelectTranscodingPath'),
+                        if (path) {
+                            $('#txtTranscodingTempPath', page).val(path);
+                        }
+                        picker.close();
+                    },
 
-                instruction: Globalize.translate('HeaderSelectTranscodingPathHelp')
+                    header: Globalize.translate('HeaderSelectTranscodingPath'),
+
+                    instruction: Globalize.translate('HeaderSelectTranscodingPathHelp')
+                });
             });
         });
+
+        $('.streamingSettingsForm').off('submit', onSubmit).on('submit', onSubmit);
 
     }).on('pageshow', "#streamingSettingsPage", function () {
 
@@ -43,25 +64,5 @@
 
         });
     });
-
-    window.StreamingSettingsPage = {
-
-        onSubmit: function () {
-
-            Dashboard.showLoadingMsg();
-
-            var form = this;
-
-            ApiClient.getServerConfiguration().done(function (config) {
-
-                config.RemoteClientBitrateLimit = parseInt(parseFloat(($('#txtRemoteClientBitrateLimit', form).val() || '0')) * 1000000);
-
-                ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
-            });
-
-            // Disable default form submission
-            return false;
-        }
-    };
 
 })(jQuery, document, window);

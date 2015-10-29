@@ -1,5 +1,6 @@
 ﻿using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Dto;
@@ -24,7 +25,6 @@ namespace MediaBrowser.MediaEncoding.Encoder
         public Stream LogFileStream { get; set; }
         public IProgress<double> Progress { get; set; }
         public TaskCompletionSource<bool> TaskCompletionSource;
-
         public EncodingJobOptions Options { get; set; }
         public string InputContainer { get; set; }
         public MediaSourceInfo MediaSource { get; set; }
@@ -56,7 +56,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
         public bool EnableMpegtsM2TsMode { get; set; }
         public TranscodeSeekInfo TranscodeSeekInfo { get; set; }
         public long? EncodingDurationTicks { get; set; }
-        public string LiveTvStreamId { get; set; }
+        public string LiveStreamId { get; set; }
         public long? RunTimeTicks;
 
         public string ItemType { get; set; }
@@ -365,6 +365,17 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 return !string.IsNullOrEmpty(Options.Profile) && !Options.Static
                     ? Options.Profile
                     : stream == null ? null : stream.Profile;
+            }
+        }
+
+        public string TargetVideoCodecTag
+        {
+            get
+            {
+                var stream = VideoStream;
+                return !Options.Static
+                    ? null
+                    : stream == null ? null : stream.CodecTag;
             }
         }
 

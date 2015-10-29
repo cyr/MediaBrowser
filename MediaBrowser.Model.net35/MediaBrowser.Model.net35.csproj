@@ -66,6 +66,9 @@
     <Compile Include="..\MediaBrowser.Model\ApiClient\ConnectionState.cs">
       <Link>ApiClient\ConnectionState.cs</Link>
     </Compile>
+    <Compile Include="..\MediaBrowser.Model\ApiClient\ConnectSignupResponse.cs">
+      <Link>ApiClient\ConnectSignupResponse.cs</Link>
+    </Compile>
     <Compile Include="..\MediaBrowser.Model\ApiClient\GeneralCommandEventArgs.cs">
       <Link>ApiClient\GeneralCommandEventArgs.cs</Link>
     </Compile>
@@ -144,6 +147,9 @@
     <Compile Include="..\MediaBrowser.Model\Configuration\AccessSchedule.cs">
       <Link>Configuration\AccessSchedule.cs</Link>
     </Compile>
+    <Compile Include="..\MediaBrowser.Model\Configuration\AutoOnOff.cs">
+      <Link>Configuration\AutoOnOff.cs</Link>
+    </Compile>
     <Compile Include="..\MediaBrowser.Model\Configuration\BaseApplicationConfiguration.cs">
       <Link>Configuration\BaseApplicationConfiguration.cs</Link>
     </Compile>
@@ -161,9 +167,6 @@
     </Compile>
     <Compile Include="..\MediaBrowser.Model\Configuration\EncodingOptions.cs">
       <Link>Configuration\EncodingOptions.cs</Link>
-    </Compile>
-    <Compile Include="..\MediaBrowser.Model\Configuration\EncodingQuality.cs">
-      <Link>Configuration\EncodingQuality.cs</Link>
     </Compile>
     <Compile Include="..\MediaBrowser.Model\Configuration\FanartOptions.cs">
       <Link>Configuration\FanartOptions.cs</Link>
@@ -699,23 +702,14 @@
     <Compile Include="..\MediaBrowser.Model\LiveTv\ProgramAudio.cs">
       <Link>LiveTv\ProgramAudio.cs</Link>
     </Compile>
-    <Compile Include="..\MediaBrowser.Model\LiveTv\ProgramInfoDto.cs">
-      <Link>LiveTv\ProgramInfoDto.cs</Link>
-    </Compile>
     <Compile Include="..\MediaBrowser.Model\LiveTv\ProgramQuery.cs">
       <Link>LiveTv\ProgramQuery.cs</Link>
     </Compile>
     <Compile Include="..\MediaBrowser.Model\LiveTv\RecommendedProgramQuery.cs">
       <Link>LiveTv\RecommendedProgramQuery.cs</Link>
     </Compile>
-    <Compile Include="..\MediaBrowser.Model\LiveTv\RecordingGroupDto.cs">
-      <Link>LiveTv\RecordingGroupDto.cs</Link>
-    </Compile>
     <Compile Include="..\MediaBrowser.Model\LiveTv\RecordingGroupQuery.cs">
       <Link>LiveTv\RecordingGroupQuery.cs</Link>
-    </Compile>
-    <Compile Include="..\MediaBrowser.Model\LiveTv\RecordingInfoDto.cs">
-      <Link>LiveTv\RecordingInfoDto.cs</Link>
     </Compile>
     <Compile Include="..\MediaBrowser.Model\LiveTv\RecordingQuery.cs">
       <Link>LiveTv\RecordingQuery.cs</Link>
@@ -779,6 +773,12 @@
     </Compile>
     <Compile Include="..\MediaBrowser.Model\MediaInfo\SubtitleFormat.cs">
       <Link>MediaInfo\SubtitleFormat.cs</Link>
+    </Compile>
+    <Compile Include="..\MediaBrowser.Model\MediaInfo\SubtitleTrackEvent.cs">
+      <Link>MediaInfo\SubtitleTrackEvent.cs</Link>
+    </Compile>
+    <Compile Include="..\MediaBrowser.Model\MediaInfo\SubtitleTrackInfo.cs">
+      <Link>MediaInfo\SubtitleTrackInfo.cs</Link>
     </Compile>
     <Compile Include="..\MediaBrowser.Model\MediaInfo\TransportStreamTimestamp.cs">
       <Link>MediaInfo\TransportStreamTimestamp.cs</Link>
@@ -1035,6 +1035,9 @@
     <Compile Include="..\MediaBrowser.Model\Session\UserDataChangeInfo.cs">
       <Link>Session\UserDataChangeInfo.cs</Link>
     </Compile>
+    <Compile Include="..\mediabrowser.model\social\SocialShareInfo.cs">
+      <Link>Social\SocialShareInfo.cs</Link>
+    </Compile>
     <Compile Include="..\MediaBrowser.Model\Sync\CompleteSyncJobInfo.cs">
       <Link>Sync\CompleteSyncJobInfo.cs</Link>
     </Compile>
@@ -1136,15 +1139,6 @@
     </Compile>
     <Compile Include="..\MediaBrowser.Model\Tasks\TaskTriggerInfo.cs">
       <Link>Tasks\TaskTriggerInfo.cs</Link>
-    </Compile>
-    <Compile Include="..\MediaBrowser.Model\Themes\AppTheme.cs">
-      <Link>Themes\AppTheme.cs</Link>
-    </Compile>
-    <Compile Include="..\MediaBrowser.Model\Themes\AppThemeInfo.cs">
-      <Link>Themes\AppThemeInfo.cs</Link>
-    </Compile>
-    <Compile Include="..\MediaBrowser.Model\Themes\ThemeImage.cs">
-      <Link>Themes\ThemeImage.cs</Link>
     </Compile>
     <Compile Include="..\MediaBrowser.Model\Updates\CheckForUpdateResult.cs">
       <Link>Updates\CheckForUpdateResult.cs</Link>

@@ -41,7 +41,7 @@ namespace MediaBrowser.Api.Playback
         public string InputContainer { get; set; }
 
         public MediaSourceInfo MediaSource { get; set; }
-        
+
         public MediaStream AudioStream { get; set; }
         public MediaStream VideoStream { get; set; }
         public MediaStream SubtitleStream { get; set; }
@@ -57,6 +57,10 @@ namespace MediaBrowser.Api.Playback
 
         public MediaProtocol InputProtocol { get; set; }
 
+        public bool IsOutputVideo
+        {
+            get { return Request is VideoStreamRequest; }
+        }
         public bool IsInputVideo { get; set; }
         public bool IsInputArchive { get; set; }
 
@@ -66,12 +70,11 @@ namespace MediaBrowser.Api.Playback
         public List<string> PlayableStreamFileNames { get; set; }
 
         public int SegmentLength = 3;
-        public bool EnableGenericHlsSegmenter = false;
         public int HlsListSize
         {
             get
             {
-                return ReadInputAtNativeFramerate ? 1000 : 0;
+                return 0;
             }
         }
 
@@ -182,7 +185,7 @@ namespace MediaBrowser.Api.Playback
 
         private async void DisposeLiveStream()
         {
-            if (MediaSource.RequiresClosing && string.IsNullOrWhiteSpace(Request.LiveStreamId))
+            if ((MediaSource.RequiresClosing) && string.IsNullOrWhiteSpace(Request.LiveStreamId))
             {
                 try
                 {
@@ -451,6 +454,17 @@ namespace MediaBrowser.Api.Playback
                 return !string.IsNullOrEmpty(VideoRequest.Profile) && !Request.Static
                     ? VideoRequest.Profile
                     : stream == null ? null : stream.Profile;
+            }
+        }
+
+        public string TargetVideoCodecTag
+        {
+            get
+            {
+                var stream = VideoStream;
+                return !Request.Static
+                    ? null
+                    : stream == null ? null : stream.CodecTag;
             }
         }
 

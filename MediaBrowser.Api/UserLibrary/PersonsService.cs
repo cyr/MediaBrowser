@@ -5,7 +5,6 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Dto;
 using ServiceStack;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -17,12 +16,6 @@ namespace MediaBrowser.Api.UserLibrary
     [Route("/Persons", "GET", Summary = "Gets all persons from a given item, folder, or the entire library")]
     public class GetPersons : GetItemsByName
     {
-        /// <summary>
-        /// Gets or sets the person types.
-        /// </summary>
-        /// <value>The person types.</value>
-        [ApiMember(Name = "PersonTypes", Description = "Optional filter by person type. Accepts multiple, comma-delimited.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
-        public string PersonTypes { get; set; }
     }
 
     /// <summary>
@@ -43,7 +36,7 @@ namespace MediaBrowser.Api.UserLibrary
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
     }
 
     /// <summary>
@@ -87,9 +80,9 @@ namespace MediaBrowser.Api.UserLibrary
 
             var dtoOptions = GetDtoOptions(request);
 
-            if (request.UserId.HasValue)
+            if (!string.IsNullOrWhiteSpace(request.UserId))
             {
-                var user = UserManager.GetUserById(request.UserId.Value);
+                var user = UserManager.GetUserById(request.UserId);
 
                 return DtoService.GetBaseItemDto(item, dtoOptions, user);
             }
@@ -115,7 +108,7 @@ namespace MediaBrowser.Api.UserLibrary
         /// <param name="request">The request.</param>
         /// <param name="items">The items.</param>
         /// <returns>IEnumerable{Tuple{System.StringFunc{System.Int32}}}.</returns>
-        protected override IEnumerable<Person> GetAllItems(GetItemsByName request, IEnumerable<BaseItem> items)
+        protected override IEnumerable<BaseItem> GetAllItems(GetItemsByName request, IEnumerable<BaseItem> items)
         {
             var inputPersonTypes = ((GetPersons)request).PersonTypes;
             var personTypes = string.IsNullOrEmpty(inputPersonTypes) ? new string[] { } : inputPersonTypes.Split(',');
@@ -151,18 +144,16 @@ namespace MediaBrowser.Api.UserLibrary
         /// <param name="itemsList">The items list.</param>
         /// <param name="personTypes">The person types.</param>
         /// <returns>IEnumerable{PersonInfo}.</returns>
-        private IEnumerable<PersonInfo> GetAllPeople(IEnumerable<BaseItem> itemsList, string[] personTypes)
+        private IEnumerable<PersonInfo> GetAllPeople(IEnumerable<BaseItem> itemsList, IEnumerable<string> personTypes)
         {
-            var people = itemsList.SelectMany(i => i.People.OrderBy(p => p.SortOrder ?? int.MaxValue).ThenBy(p => p.Type));
+            var allIds = itemsList.Select(i => i.Id).ToList();
 
-            if (personTypes.Length > 0)
+            var allPeople = LibraryManager.GetPeople(new InternalPeopleQuery
             {
-                people = people.Where(p =>
-                            personTypes.Contains(p.Type ?? string.Empty, StringComparer.OrdinalIgnoreCase) ||
-                            personTypes.Contains(p.Role ?? string.Empty, StringComparer.OrdinalIgnoreCase));
-            }
+                PersonTypes = personTypes.ToList()
+            });
 
-            return people;
+            return allPeople.Where(i => allIds.Contains(i.ItemId)).OrderBy(p => p.SortOrder ?? int.MaxValue).ThenBy(p => p.Type);
         }
     }
 }

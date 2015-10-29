@@ -1,6 +1,5 @@
 ﻿using MediaBrowser.Model.Logging;
 using MediaBrowser.Server.Implementations.HttpServer.SocketSharp;
-using ServiceStack;
 using ServiceStack.Web;
 using System;
 using System.Globalization;
@@ -13,10 +12,12 @@ namespace MediaBrowser.Server.Implementations.HttpServer
     {
         private static readonly CultureInfo UsCulture = new CultureInfo("en-US");
         private readonly ILogger _logger;
+        private readonly Func<bool> _denyIframeEmbedding;
 
-        public ResponseFilter(ILogger logger)
+        public ResponseFilter(ILogger logger, Func<bool> denyIframeEmbedding)
         {
             _logger = logger;
+            _denyIframeEmbedding = denyIframeEmbedding;
         }
 
         /// <summary>
@@ -29,6 +30,11 @@ namespace MediaBrowser.Server.Implementations.HttpServer
         {
             // Try to prevent compatibility view
             res.AddHeader("X-UA-Compatible", "IE=Edge");
+
+            if (_denyIframeEmbedding())
+            {
+                res.AddHeader("X-Frame-Options", "SAMEORIGIN");
+            }
 
             var exception = dto as Exception;
 
@@ -45,19 +51,15 @@ namespace MediaBrowser.Server.Implementations.HttpServer
                 }
             }
 
-            if (dto is CompressedResult)
-            {
-                // Per Google PageSpeed
-                // This instructs the proxies to cache two versions of the resource: one compressed, and one uncompressed. 
-                // The correct version of the resource is delivered based on the client request header. 
-                // This is a good choice for applications that are singly homed and depend on public proxies for user locality.                        
-                res.AddHeader("Vary", "Accept-Encoding");
-            }
+            var vary = "Accept-Encoding";
 
             var hasOptions = dto as IHasOptions;
+            var sharpResponse = res as WebSocketSharpResponse;
 
             if (hasOptions != null)
             {
+                hasOptions.Options["Server"] = "Mono-HTTPAPI/1.1";
+
                 // Content length has to be explicitly set on on HttpListenerResponse or it won't be happy
                 string contentLength;
 
@@ -79,14 +81,29 @@ namespace MediaBrowser.Server.Implementations.HttpServer
                             return;
                         }
 
-                        var sharpResponse = res as WebSocketSharpResponse;
                         if (sharpResponse != null)
                         {
                             sharpResponse.SendChunked = false;
                         }
                     }
                 }
+
+                string hasOptionsVary;
+                if (hasOptions.Options.TryGetValue("Vary", out hasOptionsVary))
+                {
+                    vary = hasOptionsVary;
+                }
+
+                hasOptions.Options["Vary"] = vary;
             }
+
+            //res.KeepAlive = false;
+
+            // Per Google PageSpeed
+            // This instructs the proxies to cache two versions of the resource: one compressed, and one uncompressed. 
+            // The correct version of the resource is delivered based on the client request header. 
+            // This is a good choice for applications that are singly homed and depend on public proxies for user locality.                        
+            res.AddHeader("Vary", vary);
         }
 
         /// <summary>

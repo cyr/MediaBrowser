@@ -4,7 +4,7 @@
     <title>${TitleDlna}</title>
 </head>
 <body>
-    <div id="dlnaSettingsPage" data-role="page" class="page type-interior dlnaPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Play%20to">
+    <div id="dlnaSettingsPage" data-role="page" class="page type-interior dlnaPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Play%20to" data-require="scripts/dlnasettings">
 
         <div data-role="content">
             <div class="content-primary">
@@ -36,22 +36,17 @@
                     </ul>
                     <ul data-role="listview" class="ulForm">
                         <li>
-                            <button type="submit" data-theme="b" data-icon="check">
-                                ${ButtonSave}
+                            <button type="submit" data-role="none" class="clearButton">
+                                <paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>${ButtonSave}</span></paper-button>
                             </button>
-                            <button type="button" onclick="Dashboard.navigate('dashboard.html');" data-icon="delete">
-                                ${ButtonCancel}
-                            </button>
+
+                            <paper-button raised class="cancel block btnCancel" onclick="history.back();"><iron-icon icon="close"></iron-icon><span>${ButtonCancel}</span></paper-button>
                         </li>
                     </ul>
                 </form>
 
             </div>
         </div>
-
-        <script type="text/javascript">
-            $('.dlnaSettingsForm').off('submit', DlnaSettingsPage.onSubmit).on('submit', DlnaSettingsPage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

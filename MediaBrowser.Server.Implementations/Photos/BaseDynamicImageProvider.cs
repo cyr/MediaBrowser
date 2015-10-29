@@ -13,6 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Photos
 {
@@ -32,7 +33,7 @@ namespace MediaBrowser.Server.Implementations.Photos
             ImageProcessor = imageProcessor;
         }
 
-        public virtual bool Supports(IHasImages item)
+        protected virtual bool Supports(IHasImages item)
         {
             return true;
         }
@@ -53,10 +54,23 @@ namespace MediaBrowser.Server.Implementations.Photos
                 return ItemUpdateType.None;
             }
 
-            var primaryResult = await FetchAsync(item, ImageType.Primary, options, cancellationToken).ConfigureAwait(false);
-            var thumbResult = await FetchAsync(item, ImageType.Thumb, options, cancellationToken).ConfigureAwait(false);
+            var updateType = ItemUpdateType.None;
+            var supportedImages = GetSupportedImages(item).ToList();
 
-            return primaryResult | thumbResult;
+            if (supportedImages.Contains(ImageType.Primary))
+            {
+                var primaryResult = await FetchAsync(item, ImageType.Primary, options, cancellationToken).ConfigureAwait(false);
+                updateType = updateType | primaryResult;
+            }
+
+            if (supportedImages.Contains(ImageType.Thumb))
+            {
+                var thumbResult = await FetchAsync(item, ImageType.Thumb, options, cancellationToken).ConfigureAwait(false);
+                updateType = updateType | thumbResult;
+            }
+
+
+            return updateType;
         }
 
         protected async Task<ItemUpdateType> FetchAsync(IHasImages item, ImageType imageType, MetadataRefreshOptions options, CancellationToken cancellationToken)
@@ -78,11 +92,11 @@ namespace MediaBrowser.Server.Implementations.Photos
             string cacheKey,
             CancellationToken cancellationToken)
         {
-            var outputPath = Path.Combine(ApplicationPaths.TempDirectory, Guid.NewGuid() + ".png");
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-            var imageCreated = await CreateImage(item, itemsWithImages, outputPath, imageType, 0).ConfigureAwait(false);
+            var outputPathWithoutExtension = Path.Combine(ApplicationPaths.TempDirectory, Guid.NewGuid().ToString("N"));
+            FileSystem.CreateDirectory(Path.GetDirectoryName(outputPathWithoutExtension));
+            string outputPath = await CreateImage(item, itemsWithImages, outputPathWithoutExtension, imageType, 0).ConfigureAwait(false);
 
-            if (!imageCreated)
+            if (string.IsNullOrWhiteSpace(outputPath))
             {
                 return ItemUpdateType.None;
             }
@@ -103,47 +117,72 @@ namespace MediaBrowser.Server.Implementations.Photos
             return parts.GetMD5().ToString("N");
         }
 
-        protected Task CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, bool drawText)
+        protected Task<string> CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
         {
-            return CreateCollage(primaryItem, items, outputPath, 960, 540, drawText, primaryItem.Name);
+            return CreateCollage(primaryItem, items, outputPath, 640, 360);
         }
 
         protected virtual IEnumerable<string> GetStripCollageImagePaths(IHasImages primaryItem, IEnumerable<BaseItem> items)
         {
             return items
-                .Select(i => i.GetImagePath(ImageType.Primary) ?? i.GetImagePath(ImageType.Thumb))
+                .Select(i =>
+                {
+                    var image = i.GetImageInfo(ImageType.Primary, 0);
+
+                    if (image != null && image.IsLocalFile)
+                    {
+                        return image.Path;
+                    }
+                    image = i.GetImageInfo(ImageType.Thumb, 0);
+
+                    if (image != null && image.IsLocalFile)
+                    {
+                        return image.Path;
+                    }
+                    return null;
+                })
                 .Where(i => !string.IsNullOrWhiteSpace(i));
         }
 
-        protected Task CreatePosterCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
+        protected Task<string> CreatePosterCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
         {
-            return CreateCollage(primaryItem, items, outputPath, 600, 900, true, primaryItem.Name);
+            return CreateCollage(primaryItem, items, outputPath, 400, 600);
         }
 
-        protected Task CreateSquareCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, bool drawText)
+        protected Task<string> CreateSquareCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
         {
-            return CreateCollage(primaryItem, items, outputPath, 800, 800, drawText, primaryItem.Name);
+            return CreateCollage(primaryItem, items, outputPath, 600, 600);
         }
 
-        protected Task CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height, bool drawText, string text)
+        protected Task<string> CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height)
         {
-            return CreateCollage(primaryItem, items, outputPath, width, height, drawText, text);
+            return CreateCollage(primaryItem, items, outputPath, width, height);
         }
 
-        private Task CreateCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height, bool drawText, string text)
+        private async Task<string> CreateCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            FileSystem.CreateDirectory(Path.GetDirectoryName(outputPath));
 
             var options = new ImageCollageOptions
             {
                 Height = height,
                 Width = width,
                 OutputPath = outputPath,
-                Text = drawText ? text : null,
                 InputPaths = GetStripCollageImagePaths(primaryItem, items).ToArray()
             };
 
-            return ImageProcessor.CreateImageCollage(options);
+            if (options.InputPaths.Length == 0)
+            {
+                return null;
+            }
+
+            if (!ImageProcessor.SupportsImageCollageCreation)
+            {
+                return null;
+            }
+
+            await ImageProcessor.CreateImageCollage(options).ConfigureAwait(false);
+            return outputPath;
         }
 
         public string Name
@@ -151,45 +190,41 @@ namespace MediaBrowser.Server.Implementations.Photos
             get { return "Dynamic Image Provider"; }
         }
 
-        protected virtual async Task<bool> CreateImage(IHasImages item,
+        protected virtual async Task<string> CreateImage(IHasImages item,
             List<BaseItem> itemsWithImages,
-            string outputPath,
+            string outputPathWithoutExtension,
             ImageType imageType,
             int imageIndex)
         {
             if (itemsWithImages.Count == 0)
             {
-                return false;
+                return null;
             }
 
-            var drawText = !(item is UserView);
+            string outputPath = Path.ChangeExtension(outputPathWithoutExtension, ".png");
 
             if (imageType == ImageType.Thumb)
             {
-                await CreateThumbCollage(item, itemsWithImages, outputPath, drawText).ConfigureAwait(false);
-                return true;
+                return await CreateThumbCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
             }
 
             if (imageType == ImageType.Primary)
             {
                 if (item is UserView)
                 {
-                    await CreateSquareCollage(item, itemsWithImages, outputPath, drawText).ConfigureAwait(false);
+                    return await CreateSquareCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
                 }
-                else if (item is PhotoAlbum || item is Playlist)
+                if (item is Playlist)
                 {
-                    await CreateSquareCollage(item, itemsWithImages, outputPath, drawText).ConfigureAwait(false);
+                    return await CreateSquareCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
                 }
-                else
-                {
-                    await CreatePosterCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
-                }
-
-                return true;
+                return await CreatePosterCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
             }
 
             throw new ArgumentException("Unexpected image type");
         }
+
+        private const int MaxImageAgeDays = 7;
 
         public bool HasChanged(IHasMetadata item, IDirectoryService directoryService, DateTime date)
         {
@@ -198,10 +233,35 @@ namespace MediaBrowser.Server.Implementations.Photos
                 return false;
             }
 
+            var supportedImages = GetSupportedImages(item).ToList();
+
+            if (item is UserView || item is ICollectionFolder)
+            {
+                if (supportedImages.Contains(ImageType.Primary) && HasChanged(item, ImageType.Primary))
+                {
+                    return true;
+                }
+                if (supportedImages.Contains(ImageType.Thumb) && HasChanged(item, ImageType.Thumb))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
             var items = GetItemsWithImages(item).Result;
             var cacheKey = GetConfigurationCacheKey(items, item.Name);
 
-            return HasChanged(item, ImageType.Primary, cacheKey) || HasChanged(item, ImageType.Thumb, cacheKey);
+            if (supportedImages.Contains(ImageType.Primary) && HasChanged(item, ImageType.Primary, cacheKey))
+            {
+                return true;
+            }
+            if (supportedImages.Contains(ImageType.Thumb) && HasChanged(item, ImageType.Thumb, cacheKey))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         protected bool HasChanged(IHasImages item, ImageType type, string cacheKey)
@@ -210,14 +270,44 @@ namespace MediaBrowser.Server.Implementations.Photos
 
             if (image != null)
             {
+                if (!image.IsLocalFile)
+                {
+                    return false;
+                }
+
                 if (!FileSystem.ContainsSubPath(item.GetInternalMetadataPath(), image.Path))
                 {
                     return false;
                 }
 
                 var currentPathCacheKey = (Path.GetFileNameWithoutExtension(image.Path) ?? string.Empty).Split('_').LastOrDefault();
-
                 if (string.Equals(cacheKey, currentPathCacheKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        protected bool HasChanged(IHasImages item, ImageType type)
+        {
+            var image = item.GetImageInfo(type, 0);
+
+            if (image != null)
+            {
+                if (!image.IsLocalFile)
+                {
+                    return false;
+                }
+
+                if (!FileSystem.ContainsSubPath(item.GetInternalMetadataPath(), image.Path))
+                {
+                    return false;
+                }
+
+                var age = DateTime.UtcNow - image.DateModified;
+                if (age.TotalDays <= MaxImageAgeDays)
                 {
                     return false;
                 }
@@ -234,10 +324,10 @@ namespace MediaBrowser.Server.Implementations.Photos
         protected virtual List<BaseItem> GetFinalItems(List<BaseItem> items, int limit)
         {
             // Rotate the images once every x days
-            var random = DateTime.Now.DayOfYear % 7;
+            var random = DateTime.Now.DayOfYear % MaxImageAgeDays;
 
             return items
-                .OrderBy(i => (random + "" + items.IndexOf(i)).GetMD5())
+                .OrderBy(i => (random + string.Empty + items.IndexOf(i)).GetMD5())
                 .Take(limit)
                 .OrderBy(i => i.Name)
                 .ToList();

@@ -15,8 +15,7 @@
   <ModelDescription>Emby</ModelDescription>
   <ModelNumber>3.0</ModelNumber>
   <ModelUrl>http://www.microsoft.com/</ModelUrl>
-  <IgnoreTranscodeByteRangeRequests>false</IgnoreTranscodeByteRangeRequests>
-  <EnableAlbumArtInDidl>false</EnableAlbumArtInDidl>
+  <EnableAlbumArtInDidl>true</EnableAlbumArtInDidl>
   <EnableSingleAlbumArtLimit>true</EnableSingleAlbumArtLimit>
   <SupportedMediaTypes>Audio,Photo,Video</SupportedMediaTypes>
   <AlbumArtPn>JPEG_TN</AlbumArtPn>
@@ -24,8 +23,8 @@
   <MaxAlbumArtHeight>480</MaxAlbumArtHeight>
   <MaxIconWidth>48</MaxIconWidth>
   <MaxIconHeight>48</MaxIconHeight>
-  <MaxStreamingBitrate>8000000</MaxStreamingBitrate>
-  <MaxStaticBitrate>8000000</MaxStaticBitrate>
+  <MaxStreamingBitrate>10000000</MaxStreamingBitrate>
+  <MaxStaticBitrate>10000000</MaxStaticBitrate>
   <MusicStreamingTranscodingBitrate>128000</MusicStreamingTranscodingBitrate>
   <MusicSyncBitrate>128000</MusicSyncBitrate>
   <XDlnaDoc>DMS-1.50</XDlnaDoc>
@@ -35,21 +34,23 @@
   <RequiresPlainVideoItems>false</RequiresPlainVideoItems>
   <RequiresPlainFolders>false</RequiresPlainFolders>
   <EnableMSMediaReceiverRegistrar>false</EnableMSMediaReceiverRegistrar>
+  <IgnoreTranscodeByteRangeRequests>false</IgnoreTranscodeByteRangeRequests>
+  <EnableDlnaProtocol>true</EnableDlnaProtocol>
   <XmlRootAttributes>
     <XmlAttribute name="xmlns:av" value="urn:schemas-sony-com:av" />
   </XmlRootAttributes>
   <DirectPlayProfiles>
     <DirectPlayProfile container="ts" audioCodec="ac3,aac,mp3" videoCodec="h264" type="Video" />
-    <DirectPlayProfile container="ts" audioCodec="mp3,mp2" videoCodec="mpeg2video" type="Video" />
-    <DirectPlayProfile container="mp4" audioCodec="ac3,aac,mp3,mp2" videoCodec="h264,mpeg4" type="Video" />
-    <DirectPlayProfile container="mpeg" audioCodec="mp3,mp2" videoCodec="mpeg2video,mpeg1video" type="Video" />
+    <DirectPlayProfile container="ts" audioCodec="mp3" videoCodec="mpeg2video" type="Video" />
+    <DirectPlayProfile container="mp4" audioCodec="ac3,aac,mp3" videoCodec="h264,mpeg4" type="Video" />
+    <DirectPlayProfile container="mpeg" audioCodec="mp3" videoCodec="mpeg2video,mpeg1video" type="Video" />
     <DirectPlayProfile container="asf" audioCodec="wmav2,wmapro,wmavoice" videoCodec="wmv2,wmv3,vc1" type="Video" />
     <DirectPlayProfile container="mp3" audioCodec="mp3" type="Audio" />
     <DirectPlayProfile container="asf" audioCodec="wmav2,wmapro,wmavoice" type="Audio" />
   </DirectPlayProfiles>
   <TranscodingProfiles>
     <TranscodingProfile container="mp3" type="Audio" audioCodec="mp3" estimateContentLength="false" enableMpegtsM2TsMode="false" transcodeSeekInfo="Auto" context="Streaming" />
-    <TranscodingProfile container="ts" type="Video" videoCodec="h264" audioCodec="ac3,aac" estimateContentLength="false" enableMpegtsM2TsMode="true" transcodeSeekInfo="Auto" context="Streaming" />
+    <TranscodingProfile container="ts" type="Video" videoCodec="h264" audioCodec="ac3" estimateContentLength="false" enableMpegtsM2TsMode="true" transcodeSeekInfo="Auto" context="Streaming" />
     <TranscodingProfile container="jpeg" type="Photo" estimateContentLength="false" enableMpegtsM2TsMode="false" transcodeSeekInfo="Auto" context="Streaming" />
   </TranscodingProfiles>
   <ContainerProfiles>
@@ -82,6 +83,7 @@
       <Conditions>
         <ProfileCondition condition="LessThanEqual" property="Width" value="1920" isRequired="true" />
         <ProfileCondition condition="LessThanEqual" property="Height" value="1080" isRequired="true" />
+        <ProfileCondition condition="LessThanEqual" property="VideoFramerate" value="30" isRequired="true" />
       </Conditions>
     </CodecProfile>
     <CodecProfile type="VideoAudio" codec="ac3">
@@ -93,6 +95,11 @@
       <Conditions>
         <ProfileCondition condition="LessThanEqual" property="AudioChannels" value="2" isRequired="true" />
         <ProfileCondition condition="NotEquals" property="AudioProfile" value="he-aac" isRequired="true" />
+      </Conditions>
+    </CodecProfile>
+    <CodecProfile type="VideoAudio" codec="mp3,mp2">
+      <Conditions>
+        <ProfileCondition condition="LessThanEqual" property="AudioChannels" value="2" isRequired="true" />
       </Conditions>
     </CodecProfile>
   </CodecProfiles>

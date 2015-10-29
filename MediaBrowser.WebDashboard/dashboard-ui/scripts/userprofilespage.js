@@ -30,61 +30,80 @@
 
     function deleteUser(page, id) {
 
-        $('.userMenu', page).on("popupafterclose.deleteuser", function () {
+        var msg = Globalize.translate('DeleteUserConfirmation');
 
-            $(this).off('popupafterclose.deleteuser');
+        Dashboard.confirm(msg, Globalize.translate('DeleteUser'), function (result) {
 
-            var msg = Globalize.translate('DeleteUserConfirmation');
+            if (result) {
+                Dashboard.showLoadingMsg();
 
-            Dashboard.confirm(msg, Globalize.translate('DeleteUser'), function (result) {
+                ApiClient.deleteUser(id).done(function () {
 
-                if (result) {
-                    Dashboard.showLoadingMsg();
-
-                    ApiClient.deleteUser(id).done(function () {
-
-                        loadData(page);
-                    });
-                }
-            });
-
-        }).popup('close');
+                    loadData(page);
+                });
+            }
+        });
     }
 
     function showUserMenu(elem) {
 
-        var card = $(elem).parents('.card');
-        var page = $(elem).parents('.page');
-        var userId = card.attr('data-userid');
+        var card = $(elem).parents('.card')[0];
+        var page = $(card).parents('.page')[0];
+        var userId = card.getAttribute('data-userid');
 
-        $('.userMenu', page).popup("close").remove();
+        var menuItems = [];
 
-        var html = '<div data-role="popup" class="userMenu tapHoldMenu" data-theme="a">';
-
-        html += '<ul data-role="listview" style="min-width: 180px;">';
-        html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
-
-        html += '<li><a href="useredit.html?userid=' + userId + '">' + Globalize.translate('ButtonOpen') + '</a></li>';
-
-        html += '<li><a href="userlibraryaccess.html?userid=' + userId + '">' + Globalize.translate('ButtonLibraryAccess') + '</a></li>';
-        html += '<li><a href="userparentalcontrol.html?userid=' + userId + '">' + Globalize.translate('ButtonParentalControl') + '</a></li>';
-
-        html += '<li><a href="#" class="btnDeleteUser" data-userid="' + userId + '">' + Globalize.translate('ButtonDelete') + '</a></li>';
-
-        html += '</ul>';
-
-        html += '</div>';
-
-        page.append(html);
-
-        var flyout = $('.userMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
+        menuItems.push({
+            name: Globalize.translate('ButtonOpen'),
+            id: 'open',
+            ironIcon: 'mode-edit'
         });
 
-        $('.btnDeleteUser', flyout).on('click', function () {
-            deleteUser(page, this.getAttribute('data-userid'));
+        menuItems.push({
+            name: Globalize.translate('ButtonLibraryAccess'),
+            id: 'access',
+            ironIcon: 'lock'
+        });
+
+        menuItems.push({
+            name: Globalize.translate('ButtonParentalControl'),
+            id: 'parentalcontrol',
+            ironIcon: 'person'
+        });
+
+        menuItems.push({
+            name: Globalize.translate('ButtonDelete'),
+            id: 'delete',
+            ironIcon: 'delete'
+        });
+
+        require(['actionsheet'], function () {
+
+            ActionSheetElement.show({
+                items: menuItems,
+                positionTo: card,
+                callback: function (id) {
+
+                    switch (id) {
+
+                        case 'open':
+                            Dashboard.navigate('useredit.html?userid=' + userId);
+                            break;
+                        case 'access':
+                            Dashboard.navigate('userlibraryaccess.html?userid=' + userId);
+                            break;
+                        case 'parentalcontrol':
+                            Dashboard.navigate('userparentalcontrol.html?userid=' + userId);
+                            break;
+                        case 'delete':
+                            deleteUser(page, userId);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            });
+
         });
     }
 
@@ -92,7 +111,7 @@
 
         var html = '';
 
-        var cssClass = "card squareCard alternateHover bottomPaddedCard";
+        var cssClass = "card squareCard bottomPaddedCard";
 
         if (user.Policy.IsDisabled) {
             cssClass += ' grayscale';
@@ -129,7 +148,7 @@
         html += '<div class="' + imageClass + '" style="background-image:url(\'' + imgUrl + '\');">';
 
         if (user.ConnectUserId && addConnectIndicator) {
-            html += '<div class="playedIndicator" title="' + Globalize.translate('TooltipLinkedToEmbyConnect') + '"><div class="ui-icon-cloud ui-btn-icon-notext"></div></div>';
+            html += '<div class="playedIndicator" title="' + Globalize.translate('TooltipLinkedToEmbyConnect') + '"><iron-icon icon="cloud"></iron-icon></div>';
         }
 
         html += "</div>";
@@ -142,11 +161,11 @@
 
         html += '<div class="cardFooter">';
 
-        html += '<div class="cardText" style="text-align:right; float:right;">';
-        html += '<button class="btnUserMenu" type="button" data-inline="true" data-iconpos="notext" data-icon="ellipsis-v" style="margin: 2px 0 0;"></button>';
+        html += '<div class="cardText" style="text-align:right; float:right;padding:0;">';
+        html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnUserMenu"></paper-icon-button>';
         html += "</div>";
 
-        html += '<div class="cardText" style="margin-right: 30px; padding: 11px 0 10px;">';
+        html += '<div class="cardText" style="padding-top:10px;padding-bottom:10px;">';
         html += user.Name;
         html += "</div>";
 
@@ -199,34 +218,36 @@
 
     function showPendingUserMenu(elem) {
 
-        var card = $(elem).parents('.card');
-        var page = $(elem).parents('.page');
-        var id = card.attr('data-id');
+        require(['jqmpopup'], function () {
+            var card = $(elem).parents('.card');
+            var page = $(elem).parents('.page');
+            var id = card.attr('data-id');
 
-        $('.userMenu', page).popup("close").remove();
-
-        var html = '<div data-role="popup" class="userMenu tapHoldMenu" data-theme="a">';
-
-        html += '<ul data-role="listview" style="min-width: 180px;">';
-        html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
-
-        html += '<li><a href="#" class="btnDelete" data-id="' + id + '">' + Globalize.translate('ButtonCancel') + '</a></li>';
-
-        html += '</ul>';
-
-        html += '</div>';
-
-        page.append(html);
-
-        var flyout = $('.userMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
-        });
-
-        $('.btnDelete', flyout).on('click', function () {
-            cancelAuthorization(page, this.getAttribute('data-id'));
             $('.userMenu', page).popup("close").remove();
+
+            var html = '<div data-role="popup" class="userMenu tapHoldMenu" data-theme="a">';
+
+            html += '<ul data-role="listview" style="min-width: 180px;">';
+            html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
+
+            html += '<li><a href="#" class="btnDelete" data-id="' + id + '">' + Globalize.translate('ButtonCancel') + '</a></li>';
+
+            html += '</ul>';
+
+            html += '</div>';
+
+            page.append(html);
+
+            var flyout = $('.userMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
+
+                $(this).off("popupafterclose").remove();
+
+            });
+
+            $('.btnDelete', flyout).on('click', function () {
+                cancelAuthorization(page, this.getAttribute('data-id'));
+                $('.userMenu', page).popup("close").remove();
+            });
         });
     }
 
@@ -234,7 +255,7 @@
 
         var html = '';
 
-        var cssClass = "card squareCard alternateHover bottomPaddedCard";
+        var cssClass = "card squareCard bottomPaddedCard";
 
         html += "<div data-id='" + user.Id + "' class='" + cssClass + "'>";
 
@@ -260,12 +281,11 @@
 
         html += '<div class="cardFooter">';
 
-        html += '<div class="cardText" style="text-align:right; float:right;">';
-
-        html += '<button class="btnUserMenu" type="button" data-inline="true" data-iconpos="notext" data-icon="ellipsis-v" style="margin: 2px 0 0;"></button>';
+        html += '<div class="cardText" style="text-align:right; float:right;padding:0;">';
+        html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnUserMenu"></paper-icon-button>';
         html += "</div>";
 
-        html += '<div class="cardText" style="margin-right: 30px; padding: 11px 0 10px;">';
+        html += '<div class="cardText" style="padding-top:10px;padding-bottom:10px;">';
         html += user.UserName;
         html += "</div>";
 
@@ -430,6 +450,16 @@
         });
     }
 
+    function onSubmit() {
+        var form = this;
+
+        var page = $(form).parents('.page');
+
+        inviteUser(page);
+
+        return false;
+    }
+
     $(document).on('pageinit', "#userProfilesPage", function () {
 
         var page = this;
@@ -439,25 +469,18 @@
             showInvitePopup(page);
         });
 
+        $('.btnAddUser', page).on('click', function () {
+
+            Dashboard.navigate('usernew.html');
+        });
+
+        $('.addUserForm').off('submit', onSubmit).on('submit', onSubmit);
+
     }).on('pagebeforeshow', "#userProfilesPage", function () {
 
         var page = this;
 
         loadData(page);
     });
-
-    window.UserProfilesPage = {
-
-        onSubmit: function () {
-
-            var form = this;
-
-            var page = $(form).parents('.page');
-
-            inviteUser(page);
-
-            return false;
-        }
-    };
 
 })(document, window, jQuery);

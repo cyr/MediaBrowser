@@ -2,7 +2,7 @@
 
     var currentDialogOptions;
 
-    function submitJob(userId, syncOptions, form) {
+    function submitJob(panel, userId, syncOptions, form) {
 
         if (!userId) {
             throw new Error('userId cannot be null');
@@ -46,11 +46,12 @@
             type: "POST",
             url: ApiClient.getUrl("Sync/Jobs"),
             data: JSON.stringify(options),
-            contentType: "application/json"
+            contentType: "application/json",
+            dataType: 'json'
 
         }).done(function () {
 
-            $('.syncPanel').panel('close');
+            panel.panel('close');
             $(window.SyncManager).trigger('jobsubmit');
             Dashboard.alert(Globalize.translate('MessageSyncJobCreated'));
         });
@@ -84,22 +85,24 @@
 
         if (options.showName || dialogOptions.Options.indexOf('Name') != -1) {
 
-            html += '<p>';
-            html += '<label for="txtSyncJobName">' + Globalize.translate('LabelSyncJobName') + '</label>';
-            html += '<input type="text" id="txtSyncJobName" class="txtSyncJobName" required="required" />';
-            html += '</p>';
+            html += '<div>';
+            html += '<paper-input type="text" id="txtSyncJobName" class="txtSyncJobName" required="required" label="' + Globalize.translate('LabelSyncJobName') + '"></paper-input>';
+            html += '</div>';
+            html += '<br/>';
         }
 
         html += '<div>';
-        html += '<label for="selectSyncTarget">' + Globalize.translate('LabelSyncTo') + '</label>';
         if (options.readOnlySyncTarget) {
-            html += '<input type="text" id="selectSyncTarget" readonly="readonly" />';
+            html += '<paper-input type="text" id="selectSyncTarget" readonly label="' + Globalize.translate('LabelSyncTo') + '"></paper-input>';
         } else {
+            html += '<label for="selectSyncTarget">' + Globalize.translate('LabelSyncTo') + '</label>';
             html += '<select id="selectSyncTarget" required="required" data-mini="true">';
 
             html += targets.map(function (t) {
 
-                return '<option value="' + t.Id + '">' + t.Name + '</option>';
+                var isSelected = t.Id == AppInfo.deviceId;
+                var selectedHtml = isSelected ? ' selected="selected"' : '';
+                return '<option' + selectedHtml + ' value="' + t.Id + '">' + t.Name + '</option>';
 
             }).join('');
             html += '</select>';
@@ -129,35 +132,40 @@
         html += '<div class="fldBitrate" style="display:none;">';
         html += '<br/>';
         html += '<div>';
-        html += '<label for="txtBitrate">' + Globalize.translate('LabelBitrateMbps') + '</label>';
-        html += '<input type="number" id="txtBitrate" step=".1" min=".1" />';
+        html += '<paper-input type="number" step=".1" min=".1" id="txtBitrate" label="' + Globalize.translate('LabelBitrateMbps') + '"></paper-input>';
         html += '</div>';
         html += '</div>';
-
-        if (dialogOptions.Options.indexOf('SyncNewContent') != -1) {
-            html += '<br/>';
-            html += '<div>';
-            html += '<label for="chkSyncNewContent">' + Globalize.translate('OptionAutomaticallySyncNewContent') + '</label>';
-            html += '<input type="checkbox" id="chkSyncNewContent" data-mini="true" checked="checked" />';
-            html += '<div class="fieldDescription">' + Globalize.translate('OptionAutomaticallySyncNewContentHelp') + '</div>';
-            html += '</div>';
-        }
 
         if (dialogOptions.Options.indexOf('UnwatchedOnly') != -1) {
             html += '<br/>';
             html += '<div>';
-            html += '<label for="chkUnwatchedOnly">' + Globalize.translate('OptionSyncUnwatchedVideosOnly') + '</label>';
-            html += '<input type="checkbox" id="chkUnwatchedOnly" data-mini="true" />';
-            html += '<div class="fieldDescription">' + Globalize.translate('OptionSyncUnwatchedVideosOnlyHelp') + '</div>';
+            html += '<paper-checkbox id="chkUnwatchedOnly">' + Globalize.translate('OptionSyncUnwatchedVideosOnly') + '</paper-checkbox>';
+            html += '<div class="fieldDescription paperCheckboxFieldDescription">' + Globalize.translate('OptionSyncUnwatchedVideosOnlyHelp') + '</div>';
             html += '</div>';
         }
 
-        if (dialogOptions.Options.indexOf('ItemLimit') != -1) {
+        if (dialogOptions.Options.indexOf('SyncNewContent') != -1 ||
+            dialogOptions.Options.indexOf('ItemLimit') != -1) {
+
             html += '<br/>';
-            html += '<div>';
-            html += '<label for="txtItemLimit">' + Globalize.translate('LabelItemLimit') + '</label>';
-            html += '<input type="number" id="txtItemLimit" step="1" min="1" />';
-            html += '<div class="fieldDescription">' + Globalize.translate('LabelItemLimitHelp') + '</div>';
+            html += '<div data-role="collapsible" data-mini="true">';
+            html += '<h2>' + Globalize.translate('HeaderAdvanced') + '</h2>';
+            html += '<div style="padding:0 0 1em;">';
+            if (dialogOptions.Options.indexOf('SyncNewContent') != -1) {
+                html += '<br/>';
+                html += '<div>';
+                html += '<paper-checkbox id="chkSyncNewContent" checked>' + Globalize.translate('OptionAutomaticallySyncNewContent') + '</paper-checkbox>';
+                html += '<div class="fieldDescription paperCheckboxFieldDescription">' + Globalize.translate('OptionAutomaticallySyncNewContentHelp') + '</div>';
+                html += '</div>';
+            }
+
+            if (dialogOptions.Options.indexOf('ItemLimit') != -1) {
+                html += '<div>';
+                html += '<paper-input type="number" step="1" min="1" id="txtItemLimit" label="' + Globalize.translate('LabelItemLimit') + '"></paper-input>';
+                html += '<div class="fieldDescription">' + Globalize.translate('LabelItemLimitHelp') + '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
             html += '</div>';
         }
 
@@ -188,6 +196,15 @@
 
     function showSyncMenu(options) {
 
+        requirejs(["scripts/registrationservices", "jqmcollapsible", "jqmpanel"], function () {
+            RegistrationServices.validateFeature('sync').done(function () {
+                showSyncMenuInternal(options);
+            });
+        });
+    }
+
+    function showSyncMenuInternal(options) {
+
         var userId = Dashboard.getCurrentUserId();
 
         var dialogOptionsQuery = {
@@ -212,17 +229,14 @@
 
             html += '<div style="margin:1em 0 1.5em;">';
             html += '<h1 style="margin: 0;display:inline-block;vertical-align:middle;">' + Globalize.translate('SyncMedia') + '</h1>';
-            html += '<a class="accentButton accentButton-g" style="display:inline-block;vertical-align:middle;margin-top:0;margin-left: 20px;" href="https://github.com/MediaBrowser/Wiki/wiki/Sync" target="_blank">';
-            html += '<i class="fa fa-info-circle"></i>';
-            html += Globalize.translate('ButtonHelp');
-            html += '</a>';
+
+            html += '<a href="https://github.com/MediaBrowser/Wiki/wiki/Sync" target="_blank" class="clearLink" style="margin-top:0;display:inline-block;vertical-align:middle;margin-left:1em;"><paper-button raised class="secondary mini"><iron-icon icon="info"></iron-icon><span>' + Globalize.translate('ButtonHelp') + '</span></paper-button></a>';
             html += '</div>';
 
             html += '<div class="formFields"></div>';
 
-            html += '<br/>';
             html += '<p>';
-            html += '<button type="submit" data-icon="cloud" data-theme="b">' + Globalize.translate('ButtonSync') + '</button>';
+            html += '<button type="submit" data-role="none" class="clearButton"><paper-button raised class="submit block"><iron-icon icon="sync"></iron-icon><span>' + Globalize.translate('ButtonSync') + '</span></paper-button></button>';
             html += '</p>';
 
             html += '</form>';
@@ -237,7 +251,7 @@
 
             $('form', elem).on('submit', function () {
 
-                submitJob(userId, options, this);
+                submitJob(elem, userId, options, this);
                 return false;
             });
 
@@ -247,6 +261,8 @@
                 dialogOptionsFn: getTargetDialogOptionsFn(dialogOptionsQuery)
             });
         });
+
+        require(['jqmicons']);
     }
 
     function getTargetDialogOptionsFn(query) {
@@ -334,17 +350,21 @@
             var selectedAttribute = o.IsDefault ? ' selected="selected"' : '';
             return '<option value="' + o.Id + '"' + selectedAttribute + '>' + o.Name + '</option>';
 
-        }).join('')).trigger('change').selectmenu('refresh');
+        }).join('')).trigger('change');
 
         $('#selectQuality', form).html(options.QualityOptions.map(function (o) {
 
             var selectedAttribute = o.IsDefault ? ' selected="selected"' : '';
             return '<option value="' + o.Id + '"' + selectedAttribute + '>' + o.Name + '</option>';
 
-        }).join('')).trigger('change').selectmenu('refresh');
+        }).join('')).trigger('change');
     }
 
     function isAvailable(item, user) {
+
+        if (AppInfo.isNativeApp && !Dashboard.capabilities().SupportsSync) {
+            return false;
+        }
 
         return item.SupportsSync;
     }
@@ -359,20 +379,15 @@
 
     function showSyncButtonsPerUser(page) {
 
-        var apiClient = ConnectionManager.currentApiClient();
+        var apiClient = window.ApiClient;
 
-        if (!apiClient) {
+        if (!apiClient || !apiClient.getCurrentUserId()) {
             return;
         }
 
         Dashboard.getCurrentUser().done(function (user) {
 
-            if (user.Policy.EnableSync) {
-                $('.categorySyncButton', page).show();
-            } else {
-                $('.categorySyncButton', page).hide();
-            }
-
+            $('.categorySyncButton', page).visible(user.Policy.EnableSync);
         });
     }
 
@@ -396,11 +411,13 @@
             onCategorySyncButtonClick(page, this);
         });
 
-    }).on('pagebeforeshow', ".libraryPage", function () {
+    }).on('pageshow', ".libraryPage", function () {
 
         var page = this;
 
-        showSyncButtonsPerUser(page);
+        if (!Dashboard.isServerlessPage()) {
+            showSyncButtonsPerUser(page);
+        }
 
     });
 

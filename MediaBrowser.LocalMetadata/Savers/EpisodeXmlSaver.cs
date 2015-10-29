@@ -9,20 +9,26 @@ using System.IO;
 using System.Security;
 using System.Text;
 using System.Threading;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.LocalMetadata.Savers
 {
-    public class EpisodeXmlSaver : IMetadataFileSaver
+    public class EpisodeXmlProvider : IMetadataFileSaver, IConfigurableProvider
     {
         private readonly IItemRepository _itemRepository;
 
         private readonly CultureInfo _usCulture = new CultureInfo("en-US");
         private readonly IServerConfigurationManager _config;
+        private readonly ILibraryManager _libraryManager;
+        private IFileSystem _fileSystem;
 
-        public EpisodeXmlSaver(IItemRepository itemRepository, IServerConfigurationManager config)
+        public EpisodeXmlProvider(IItemRepository itemRepository, IServerConfigurationManager config, ILibraryManager libraryManager, IFileSystem fileSystem)
         {
             _itemRepository = itemRepository;
             _config = config;
+            _libraryManager = libraryManager;
+            _fileSystem = fileSystem;
         }
 
         /// <summary>
@@ -47,6 +53,11 @@ namespace MediaBrowser.LocalMetadata.Savers
             {
                 return XmlProviderUtils.Name;
             }
+        }
+
+        public bool IsEnabled
+        {
+            get { return !_config.Configuration.DisableXmlSavers; }
         }
 
         /// <summary>
@@ -116,7 +127,7 @@ namespace MediaBrowser.LocalMetadata.Savers
                 builder.Append("<FirstAired>" + SecurityElement.Escape(episode.PremiereDate.Value.ToLocalTime().ToString("yyyy-MM-dd")) + "</FirstAired>");
             }
 
-            XmlSaverHelpers.AddCommonNodes(episode, builder);
+            XmlSaverHelpers.AddCommonNodes(episode, _libraryManager, builder);
             XmlSaverHelpers.AddMediaInfo(episode, builder, _itemRepository);
 
             builder.Append("</Item>");
@@ -136,7 +147,8 @@ namespace MediaBrowser.LocalMetadata.Savers
                     "DVD_episodenumber",
                     "DVD_season",
                     "absolute_number"
-                }, _config);
+
+                }, _config, _fileSystem);
         }
 
         /// <summary>

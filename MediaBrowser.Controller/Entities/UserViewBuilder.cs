@@ -66,7 +66,7 @@ namespace MediaBrowser.Controller.Entities
                     {
                         var result = await _channelManager.GetChannelsInternal(new ChannelQuery
                         {
-                            UserId = user.Id.ToString("N"),
+                            UserId = user == null ? null : user.Id.ToString("N"),
                             Limit = query.Limit,
                             StartIndex = query.StartIndex
 
@@ -264,10 +264,7 @@ namespace MediaBrowser.Controller.Entities
 
         private async Task<QueryResult<BaseItem>> FindPlaylists(Folder parent, User user, InternalItemsQuery query)
         {
-            var collectionFolders = user.RootFolder.GetChildren(user, true).Select(i => i.Id).ToList();
-
-            var list = _playlistManager.GetPlaylists(user.Id.ToString("N"))
-                .Where(i => i.GetChildren(user, true).Any(media => _libraryManager.GetCollectionFolders(media).Select(c => c.Id).Any(collectionFolders.Contains)));
+            var list = _playlistManager.GetPlaylists(user.Id.ToString("N"));
 
             return GetResult(list, parent, query);
         }
@@ -288,14 +285,14 @@ namespace MediaBrowser.Controller.Entities
 
             var list = new List<BaseItem>();
 
-            list.Add(await GetUserView(SpecialFolder.MusicLatest, user, "0", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicPlaylists, user, "1", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicAlbums, user, "2", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicAlbumArtists, user, "3", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicLatest, "0", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicPlaylists, "1", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicAlbums, "2", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicAlbumArtists, "3", parent).ConfigureAwait(false));
             //list.Add(await GetUserView(SpecialFolder.MusicArtists, user, "4", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicSongs, user, "5", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicGenres, user, "6", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicFavorites, user, "7", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicSongs, "5", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicGenres, "6", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicFavorites, "7", parent).ConfigureAwait(false));
 
             return GetResult(list, parent, query);
         }
@@ -304,9 +301,9 @@ namespace MediaBrowser.Controller.Entities
         {
             var list = new List<BaseItem>();
 
-            list.Add(await GetUserView(SpecialFolder.MusicFavoriteAlbums, user, "0", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicFavoriteArtists, user, "1", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MusicFavoriteSongs, user, "2", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicFavoriteAlbums, "0", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicFavoriteArtists, "1", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MusicFavoriteSongs, "2", parent).ConfigureAwait(false));
 
             return GetResult(list, parent, query);
         }
@@ -332,7 +329,7 @@ namespace MediaBrowser.Controller.Entities
 
                 })
                 .Where(i => i != null)
-                .Select(i => GetUserView(i.Name, SpecialFolder.MusicGenre, user, i.SortName, parent));
+                .Select(i => GetUserView(i.Name, SpecialFolder.MusicGenre, i.SortName, parent));
 
             var genres = await Task.WhenAll(tasks).ConfigureAwait(false);
 
@@ -344,94 +341,42 @@ namespace MediaBrowser.Controller.Entities
             var items = GetRecursiveChildren(queryParent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
                 .Where(i => !i.IsFolder)
                 .Where(i => i.Genres.Contains(displayParent.Name, StringComparer.OrdinalIgnoreCase))
-                .OfType<IHasAlbumArtist>()
-                .SelectMany(i => i.AlbumArtists)
-                .DistinctNames()
-                .Select(i =>
-                {
-                    try
-                    {
-                        return _libraryManager.GetArtist(i);
-                    }
-                    catch
-                    {
-                        // Already logged at lower levels
-                        return null;
-                    }
-                })
-                .Where(i => i != null);
+                .OfType<IHasAlbumArtist>();
 
-            return GetResult(items, queryParent, query);
+            var artists = _libraryManager.GetAlbumArtists(items);
+
+            return GetResult(artists, queryParent, query);
         }
 
         private QueryResult<BaseItem> GetMusicAlbumArtists(Folder parent, User user, InternalItemsQuery query)
         {
-            var artists = GetRecursiveChildren(parent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
+            var items = GetRecursiveChildren(parent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
                 .Where(i => !i.IsFolder)
-                .OfType<IHasAlbumArtist>()
-                .SelectMany(i => i.AlbumArtists)
-                .DistinctNames()
-                .Select(i =>
-                {
-                    try
-                    {
-                        return _libraryManager.GetArtist(i);
-                    }
-                    catch
-                    {
-                        // Already logged at lower levels
-                        return null;
-                    }
-                })
-                .Where(i => i != null);
+                .OfType<IHasAlbumArtist>();
+
+            var artists = _libraryManager.GetAlbumArtists(items);
 
             return GetResult(artists, parent, query);
         }
 
         private QueryResult<BaseItem> GetMusicArtists(Folder parent, User user, InternalItemsQuery query)
         {
-            var artists = GetRecursiveChildren(parent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
+            var items = GetRecursiveChildren(parent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
                 .Where(i => !i.IsFolder)
-                .OfType<IHasArtist>()
-                .SelectMany(i => i.Artists)
-                .DistinctNames()
-                .Select(i =>
-                {
-                    try
-                    {
-                        return _libraryManager.GetArtist(i);
-                    }
-                    catch
-                    {
-                        // Already logged at lower levels
-                        return null;
-                    }
-                })
-                .Where(i => i != null);
+                .OfType<IHasArtist>();
+
+            var artists = _libraryManager.GetArtists(items);
 
             return GetResult(artists, parent, query);
         }
 
         private QueryResult<BaseItem> GetFavoriteArtists(Folder parent, User user, InternalItemsQuery query)
         {
-            var artists = GetRecursiveChildren(parent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
+            var items = GetRecursiveChildren(parent, user, new[] { CollectionType.Music, CollectionType.MusicVideos })
                 .Where(i => !i.IsFolder)
-                .OfType<IHasAlbumArtist>()
-                .SelectMany(i => i.AlbumArtists)
-                .DistinctNames()
-                .Select(i =>
-                {
-                    try
-                    {
-                        return _libraryManager.GetArtist(i);
-                    }
-                    catch
-                    {
-                        // Already logged at lower levels
-                        return null;
-                    }
-                })
-                .Where(i => i != null && _userDataManager.GetUserData(user.Id, i.GetUserDataKey()).IsFavorite);
+                .OfType<IHasAlbumArtist>();
+
+            var artists = _libraryManager.GetAlbumArtists(items).Where(i => _userDataManager.GetUserData(user.Id, i.GetUserDataKey()).IsFavorite);
 
             return GetResult(artists, parent, query);
         }
@@ -498,12 +443,12 @@ namespace MediaBrowser.Controller.Entities
 
             var list = new List<BaseItem>();
 
-            list.Add(await GetUserView(SpecialFolder.MovieResume, user, "0", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MovieLatest, user, "1", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MovieMovies, user, "2", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MovieCollections, user, "3", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MovieFavorites, user, "4", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.MovieGenres, user, "5", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MovieResume, "0", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MovieLatest, "1", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MovieMovies, "2", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MovieCollections, "3", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MovieFavorites, "4", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.MovieGenres, "5", parent).ConfigureAwait(false));
 
             return GetResult(list, parent, query);
         }
@@ -609,7 +554,7 @@ namespace MediaBrowser.Controller.Entities
 
                 })
                 .Where(i => i != null)
-                .Select(i => GetUserView(i.Name, SpecialFolder.MovieGenre, user, i.SortName, parent));
+                .Select(i => GetUserView(i.Name, SpecialFolder.MovieGenre, i.SortName, parent));
 
             var genres = await Task.WhenAll(tasks).ConfigureAwait(false);
 
@@ -632,19 +577,9 @@ namespace MediaBrowser.Controller.Entities
 
         private async Task<QueryResult<BaseItem>> GetBoxsetView(Folder parent, User user, InternalItemsQuery query)
         {
-            return GetResult(GetMediaFolders(user).SelectMany(i =>
-            {
-                var hasCollectionType = i as ICollectionFolder;
-                Func<BaseItem, bool> filter = b => b is BoxSet;
+            var collections = _collectionManager.GetCollections(user);
 
-                if (hasCollectionType != null && string.Equals(hasCollectionType.CollectionType, CollectionType.BoxSets, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i.GetChildren(user, true).Where(filter);
-                }
-
-                return i.GetRecursiveChildren(user, filter);
-
-            }), parent, query);
+            return GetResult(collections, parent, query);
         }
 
         private async Task<QueryResult<BaseItem>> GetPhotosView(Folder queryParent, User user, InternalItemsQuery query)
@@ -671,13 +606,13 @@ namespace MediaBrowser.Controller.Entities
 
             var list = new List<BaseItem>();
 
-            list.Add(await GetUserView(SpecialFolder.TvResume, user, "0", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.TvNextUp, user, "1", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.TvLatest, user, "2", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.TvShowSeries, user, "3", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.TvFavoriteSeries, user, "4", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.TvFavoriteEpisodes, user, "5", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.TvGenres, user, "6", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvResume, "0", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvNextUp, "1", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvLatest, "2", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvShowSeries, "3", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvFavoriteSeries, "4", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvFavoriteEpisodes, "5", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.TvGenres, "6", parent).ConfigureAwait(false));
 
             return GetResult(list, parent, query);
         }
@@ -692,11 +627,11 @@ namespace MediaBrowser.Controller.Entities
 
             var list = new List<BaseItem>();
 
-            list.Add(await GetUserView(SpecialFolder.LatestGames, user, "0", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.RecentlyPlayedGames, user, "1", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.GameFavorites, user, "2", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.GameSystems, user, "3", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.GameGenres, user, "4", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.LatestGames, "0", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.RecentlyPlayedGames, "1", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.GameFavorites, "2", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.GameSystems, "3", parent).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.GameGenres, "4", parent).ConfigureAwait(false));
 
             return GetResult(list, parent, query);
         }
@@ -794,7 +729,7 @@ namespace MediaBrowser.Controller.Entities
 
                 })
                 .Where(i => i != null)
-                .Select(i => GetUserView(i.Name, SpecialFolder.TvGenre, user, i.SortName, parent));
+                .Select(i => GetUserView(i.Name, SpecialFolder.TvGenre, i.SortName, parent));
 
             var genres = await Task.WhenAll(tasks).ConfigureAwait(false);
 
@@ -846,7 +781,7 @@ namespace MediaBrowser.Controller.Entities
 
                 })
                 .Where(i => i != null)
-                .Select(i => GetUserView(i.Name, SpecialFolder.GameGenre, user, i.SortName, parent));
+                .Select(i => GetUserView(i.Name, SpecialFolder.GameGenre, i.SortName, parent));
 
             var genres = await Task.WhenAll(tasks).ConfigureAwait(false);
 
@@ -1096,11 +1031,6 @@ namespace MediaBrowser.Controller.Entities
                 return false;
             }
 
-            if (request.IsUnidentified.HasValue)
-            {
-                return false;
-            }
-
             if (request.IsYearMismatched.HasValue)
             {
                 return false;
@@ -1112,6 +1042,11 @@ namespace MediaBrowser.Controller.Entities
             }
 
             if (request.PersonIds.Length > 0)
+            {
+                return false;
+            }
+
+            if (request.ItemIds.Length > 0)
             {
                 return false;
             }
@@ -1142,6 +1077,26 @@ namespace MediaBrowser.Controller.Entities
             }
 
             if (request.OfficialRatings.Length > 0)
+            {
+                return false;
+            }
+
+            if (request.MinPlayers.HasValue)
+            {
+                return false;
+            }
+
+            if (request.MaxPlayers.HasValue)
+            {
+                return false;
+            }
+
+            if (request.MinCommunityRating.HasValue)
+            {
+                return false;
+            }
+
+            if (request.MinCriticRating.HasValue)
             {
                 return false;
             }
@@ -1304,6 +1259,41 @@ namespace MediaBrowser.Controller.Entities
 
         public static bool Filter(BaseItem item, User user, InternalItemsQuery query, IUserDataManager userDataManager, ILibraryManager libraryManager)
         {
+            if (query.ItemIdsFromPersonFilters == null)
+            {
+                if (query.PersonIds.Length > 0)
+                {
+                    var names = query.PersonIds
+                        .Select(libraryManager.GetItemById)
+                        .Select(i => i == null ? null : i.Name)
+                        .Where(i => !string.IsNullOrWhiteSpace(i))
+                        .ToList();
+
+                    var itemIdList = new List<Guid>();
+                    foreach (var name in names)
+                    {
+                        itemIdList.AddRange(libraryManager.GetItemIds(new InternalItemsQuery
+                        {
+                            Person = name
+                        }));
+                    }
+                    query.ItemIdsFromPersonFilters = itemIdList;
+                }
+
+                // Apply person filter
+                else if (!string.IsNullOrWhiteSpace(query.Person))
+                {
+                    var itemIdList = new List<Guid>();
+
+                    itemIdList.AddRange(libraryManager.GetItemIds(new InternalItemsQuery
+                    {
+                        Person = query.Person,
+                        PersonTypes = query.PersonTypes
+                    }));
+                    query.ItemIdsFromPersonFilters = itemIdList;
+                }
+            }
+
             if (query.MediaTypes.Length > 0 && !query.MediaTypes.Contains(item.MediaType ?? string.Empty, StringComparer.OrdinalIgnoreCase))
             {
                 return false;
@@ -1407,16 +1397,7 @@ namespace MediaBrowser.Controller.Entities
                 var val = query.IsHD.Value;
                 var video = item as Video;
 
-                if (video == null || val != video.IsHD)
-                {
-                    return false;
-                }
-            }
-
-            if (query.IsUnidentified.HasValue)
-            {
-                var val = query.IsUnidentified.Value;
-                if (item.IsUnidentified != val)
+                if (video == null || !video.IsHD.HasValue || val != video.IsHD)
                 {
                     return false;
                 }
@@ -1691,46 +1672,20 @@ namespace MediaBrowser.Controller.Entities
                 return false;
             }
 
-            // Apply person filter
-            if (query.PersonIds.Length > 0)
+            if (query.ItemIds.Length > 0)
             {
-                var names = query.PersonIds
-                    .Select(libraryManager.GetItemById)
-                    .Select(i => i == null ? "-1" : i.Name)
-                    .ToList();
-
-                if (!(names.Any(
-                        v => item.People.Select(i => i.Name).Contains(v, StringComparer.OrdinalIgnoreCase))))
+                if (!query.ItemIds.Contains(item.Id.ToString("N"), StringComparer.OrdinalIgnoreCase))
                 {
                     return false;
                 }
             }
 
             // Apply person filter
-            if (!string.IsNullOrWhiteSpace(query.Person))
+            if (query.ItemIdsFromPersonFilters != null)
             {
-                var personTypes = query.PersonTypes;
-
-                if (personTypes.Length == 0)
+                if (!query.ItemIdsFromPersonFilters.Contains(item.Id))
                 {
-                    if (!(item.People.Any(p => string.Equals(p.Name, query.Person, StringComparison.OrdinalIgnoreCase))))
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    var types = personTypes;
-
-                    var ok = new[] { item }.Any(i =>
-                            i.People != null &&
-                            i.People.Any(p =>
-                                string.Equals(p.Name, query.Person, StringComparison.OrdinalIgnoreCase) && (types.Contains(p.Type ?? string.Empty, StringComparer.OrdinalIgnoreCase) || types.Contains(p.Role ?? string.Empty, StringComparer.OrdinalIgnoreCase))));
-
-                    if (!ok)
-                    {
-                        return false;
-                    }
+                    return false;
                 }
             }
 
@@ -1749,21 +1704,111 @@ namespace MediaBrowser.Controller.Entities
                 }
             }
 
+            if (query.MinPlayers.HasValue)
+            {
+                var filterValue = query.MinPlayers.Value;
+
+                var game = item as Game;
+
+                if (game != null)
+                {
+                    var players = game.PlayersSupported ?? 1;
+
+                    var ok = players >= filterValue;
+
+                    if (!ok)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            if (query.MaxPlayers.HasValue)
+            {
+                var filterValue = query.MaxPlayers.Value;
+
+                var game = item as Game;
+
+                if (game != null)
+                {
+                    var players = game.PlayersSupported ?? 1;
+
+                    var ok = players <= filterValue;
+
+                    if (!ok)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            if (query.MinCommunityRating.HasValue)
+            {
+                var val = query.MinCommunityRating.Value;
+
+                if (!(item.CommunityRating.HasValue && item.CommunityRating >= val))
+                {
+                    return false;
+                }
+            }
+
+            if (query.MinCriticRating.HasValue)
+            {
+                var val = query.MinCriticRating.Value;
+
+                var hasCriticRating = item as IHasCriticRating;
+
+                if (hasCriticRating != null)
+                {
+                    if (!(hasCriticRating.CriticRating.HasValue && hasCriticRating.CriticRating >= val))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
 
         private IEnumerable<Folder> GetMediaFolders(User user)
         {
-            var excludeFolderIds = user.Configuration.ExcludeFoldersFromGrouping.Select(i => new Guid(i)).ToList();
-
+            if (user == null)
+            {
+                return _libraryManager.RootFolder
+                    .Children
+                    .OfType<Folder>()
+                    .Where(i => !UserView.IsExcludedFromGrouping(i));
+            }
             return user.RootFolder
                 .GetChildren(user, true, true)
                 .OfType<Folder>()
-                .Where(i => !excludeFolderIds.Contains(i.Id) && !UserView.IsExcludedFromGrouping(i));
+                .Where(i => user.IsFolderGrouped(i.Id) && !UserView.IsExcludedFromGrouping(i));
         }
 
         private IEnumerable<Folder> GetMediaFolders(User user, IEnumerable<string> viewTypes)
         {
+            if (user == null)
+            {
+                return GetMediaFolders(null)
+                    .Where(i =>
+                    {
+                        var folder = i as ICollectionFolder;
+
+                        return folder != null && viewTypes.Contains(folder.CollectionType ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+                    });
+            }
             return GetMediaFolders(user)
                 .Where(i =>
                 {
@@ -1787,7 +1832,17 @@ namespace MediaBrowser.Controller.Entities
         {
             if (parent == null || parent is UserView)
             {
+                if (user == null)
+                {
+                    return GetMediaFolders(null, viewTypes).SelectMany(i => i.GetRecursiveChildren());
+                }
+
                 return GetMediaFolders(user, viewTypes).SelectMany(i => i.GetRecursiveChildren(user));
+            }
+
+            if (user == null)
+            {
+                return parent.GetRecursiveChildren();
             }
 
             return parent.GetRecursiveChildren(user);
@@ -1797,7 +1852,17 @@ namespace MediaBrowser.Controller.Entities
         {
             if (parent == null || parent is UserView)
             {
+                if (user == null)
+                {
+                    return GetMediaFolders(null, viewTypes).SelectMany(i => i.GetRecursiveChildren(filter));
+                }
+
                 return GetMediaFolders(user, viewTypes).SelectMany(i => i.GetRecursiveChildren(user, filter));
+            }
+
+            if (user == null)
+            {
+                return parent.GetRecursiveChildren(filter);
             }
 
             return parent.GetRecursiveChildren(user, filter);
@@ -1819,26 +1884,20 @@ namespace MediaBrowser.Controller.Entities
             var list = new List<BaseItem>();
 
             //list.Add(await GetUserSubView(SpecialFolder.LiveTvNowPlaying, user, "0", parent).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.LiveTvChannels, user, string.Empty, user.RootFolder).ConfigureAwait(false));
-            list.Add(await GetUserView(SpecialFolder.LiveTvRecordingGroups, user, string.Empty, user.RootFolder).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.LiveTvChannels, string.Empty, user.RootFolder).ConfigureAwait(false));
+            list.Add(await GetUserView(SpecialFolder.LiveTvRecordingGroups, string.Empty, user.RootFolder).ConfigureAwait(false));
 
             return GetResult(list, queryParent, query);
         }
 
-        private async Task<UserView> GetUserView(string name, string type, User user, string sortName, BaseItem parent)
+        private Task<UserView> GetUserView(string name, string type, string sortName, BaseItem parent)
         {
-            var view = await _userViewManager.GetUserSubView(name, parent.Id.ToString("N"), type, user, sortName, CancellationToken.None)
-                        .ConfigureAwait(false);
-
-            return view;
+            return _userViewManager.GetUserSubView(name, parent.Id.ToString("N"), type, sortName, CancellationToken.None);
         }
 
-        private async Task<UserView> GetUserView(string type, User user, string sortName, BaseItem parent)
+        private Task<UserView> GetUserView(string type, string sortName, BaseItem parent)
         {
-            var view = await _userViewManager.GetUserSubView(parent.Id.ToString("N"), type, user, sortName, CancellationToken.None)
-                        .ConfigureAwait(false);
-
-            return view;
+            return _userViewManager.GetUserSubView(parent.Id.ToString("N"), type, sortName, CancellationToken.None);
         }
 
         public static bool IsYearMismatched(BaseItem item, ILibraryManager libraryManager)

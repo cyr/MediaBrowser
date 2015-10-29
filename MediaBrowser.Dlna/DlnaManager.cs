@@ -17,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using CommonIO;
 
 namespace MediaBrowser.Dlna
 {
@@ -279,8 +280,7 @@ namespace MediaBrowser.Dlna
         {
             try
             {
-                return new DirectoryInfo(path)
-                    .EnumerateFiles("*", SearchOption.TopDirectoryOnly)
+				return _fileSystem.GetFiles(path)
                     .Where(i => string.Equals(i.Extension, ".xml", StringComparison.OrdinalIgnoreCase))
                     .Select(i => ParseProfileXmlFile(i.FullName, type))
                     .Where(i => i != null)
@@ -342,8 +342,7 @@ namespace MediaBrowser.Dlna
         {
             try
             {
-                return new DirectoryInfo(path)
-                    .EnumerateFiles("*", SearchOption.TopDirectoryOnly)
+				return _fileSystem.GetFiles(path)
                     .Where(i => string.Equals(i.Extension, ".xml", StringComparison.OrdinalIgnoreCase))
                     .Select(i => new InternalProfileInfo
                     {
@@ -385,7 +384,7 @@ namespace MediaBrowser.Dlna
 
                     if (!fileInfo.Exists || fileInfo.Length != stream.Length)
                     {
-                        Directory.CreateDirectory(systemProfilesPath);
+						_fileSystem.CreateDirectory(systemProfilesPath);
 
                         using (var fileStream = _fileSystem.GetFileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
                         {
@@ -396,7 +395,7 @@ namespace MediaBrowser.Dlna
             }
 
             // Not necessary, but just to make it easy to find
-            Directory.CreateDirectory(UserProfilesPath);
+			_fileSystem.CreateDirectory(UserProfilesPath);
         }
 
         public void DeleteProfile(string id)
@@ -482,7 +481,7 @@ namespace MediaBrowser.Dlna
             var profile = GetProfile(headers) ??
                           GetDefaultProfile();
 
-            return new DescriptionXmlBuilder(profile, serverUuId, serverAddress, _appHost.FriendlyName).GetXml();
+            return new DescriptionXmlBuilder(profile, serverUuId, serverAddress, _appHost.FriendlyName, serverUuId.GetMD5().ToString("N")).GetXml();
         }
 
         public ImageStream GetIcon(string filename)
@@ -525,10 +524,12 @@ namespace MediaBrowser.Dlna
                 new Xbox360Profile(),
                 new XboxOneProfile(),
                 new SonyPs3Profile(),
+                new SonyPs4Profile(),
                 new SonyBravia2010Profile(),
                 new SonyBravia2011Profile(),
                 new SonyBravia2012Profile(),
                 new SonyBravia2013Profile(),
+                new SonyBravia2014Profile(),
                 new SonyBlurayPlayer2013Profile(),
                 new SonyBlurayPlayerProfile(),
                 new PanasonicVieraProfile(),
@@ -544,7 +545,10 @@ namespace MediaBrowser.Dlna
                 new DirectTvProfile(),
                 new DishHopperJoeyProfile(),
                 new DefaultProfile(),
-                new PopcornHourProfile()
+                new PopcornHourProfile(),
+                new VlcProfile(),
+                new BubbleUpnpProfile(),
+                new KodiProfile(),
             };
 
             foreach (var item in list)

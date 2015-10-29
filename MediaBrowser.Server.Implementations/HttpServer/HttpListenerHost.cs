@@ -1,6 +1,7 @@
 ﻿using Funq;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Server.Implementations.HttpServer.SocketSharp;
@@ -43,6 +44,8 @@ namespace MediaBrowser.Server.Implementations.HttpServer
 
         public string CertificatePath { get; private set; }
 
+        private readonly IServerConfigurationManager _config;
+
         /// <summary>
         /// Gets the local end points.
         /// </summary>
@@ -62,19 +65,22 @@ namespace MediaBrowser.Server.Implementations.HttpServer
         }
 
         public HttpListenerHost(IApplicationHost applicationHost,
-            ILogManager logManager,
+            ILogManager logManager, 
+            IServerConfigurationManager config,
             string serviceName,
-            string defaultRedirectPath,
-            params Assembly[] assembliesWithServices)
+            string defaultRedirectPath, params Assembly[] assembliesWithServices)
             : base(serviceName, assembliesWithServices)
         {
             DefaultRedirectPath = defaultRedirectPath;
+            _config = config;
 
             _logger = logManager.GetLogger("HttpServer");
 
             _containerAdapter = new ContainerAdapter(applicationHost);
         }
 
+        public string GlobalResponse { get; set; }
+        
         public override void Configure(Container container)
         {
             HostConfig.Instance.DefaultRedirectPath = DefaultRedirectPath;
@@ -86,7 +92,7 @@ namespace MediaBrowser.Server.Implementations.HttpServer
                 {typeof (FileNotFoundException), 404},
                 {typeof (DirectoryNotFoundException), 404},
                 {typeof (SecurityException), 401},
-                {typeof (UnauthorizedAccessException), 401}
+                {typeof (UnauthorizedAccessException), 500}
             };
 
             HostConfig.Instance.DebugMode = true;
@@ -100,7 +106,7 @@ namespace MediaBrowser.Server.Implementations.HttpServer
             container.Adapter = _containerAdapter;
 
             Plugins.Add(new SwaggerFeature());
-            Plugins.Add(new CorsFeature(allowedHeaders: "Content-Type, Authorization, Range, X-MediaBrowser-Token"));
+            Plugins.Add(new CorsFeature(allowedHeaders: "Content-Type, Authorization, Range, X-MediaBrowser-Token, X-Emby-Authorization"));
 
             //Plugins.Add(new AuthFeature(() => new AuthUserSession(), new IAuthProvider[] {
             //    new SessionAuthProvider(_containerAdapter.Resolve<ISessionContext>()),
@@ -115,7 +121,7 @@ namespace MediaBrowser.Server.Implementations.HttpServer
                 }
             });
 
-            HostContext.GlobalResponseFilters.Add(new ResponseFilter(_logger).FilterResponse);
+            HostContext.GlobalResponseFilters.Add(new ResponseFilter(_logger, () => _config.Configuration.DenyIFrameEmbedding).FilterResponse);
         }
 
         public override void OnAfterInit()
@@ -329,6 +335,13 @@ namespace MediaBrowser.Server.Implementations.HttpServer
             if (string.IsNullOrEmpty(localPath))
             {
                 httpRes.RedirectToUrl("/" + DefaultRedirectPath);
+                return Task.FromResult(true);
+            }
+
+            if (!string.IsNullOrWhiteSpace(GlobalResponse))
+            {
+                httpRes.Write(GlobalResponse);
+                httpRes.ContentType = "text/plain";
                 return Task.FromResult(true);
             }
 

@@ -28,6 +28,14 @@ namespace MediaBrowser.Api.Movies
     {
     }
 
+    /// <summary>
+    /// Class GetSimilarTrailers
+    /// </summary>
+    [Route("/Trailers/{Id}/Similar", "GET", Summary = "Finds movies and trailers similar to a given trailer.")]
+    public class GetSimilarTrailers : BaseGetSimilarItemsFromItem
+    {
+    }
+
     [Route("/Movies/Recommendations", "GET", Summary = "Gets movie recommendations")]
     public class GetMovieRecommendations : IReturn<RecommendationDto[]>, IHasItemFields
     {
@@ -42,7 +50,7 @@ namespace MediaBrowser.Api.Movies
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         /// <summary>
         /// Specify this to localize the search to a specific item or folder. Omit to use the root.
@@ -117,16 +125,27 @@ namespace MediaBrowser.Api.Movies
             return ToOptimizedSerializedResultUsingCache(result);
         }
 
+        public async Task<object> Get(GetSimilarTrailers request)
+        {
+            var result = await GetSimilarItemsResult(
+                // Strip out secondary versions
+                request, item => (item is Movie) && !((Video)item).PrimaryVersionId.HasValue,
+
+                SimilarItemsHelper.GetSimiliarityScore).ConfigureAwait(false);
+
+            return ToOptimizedSerializedResultUsingCache(result);
+        }
+
         public async Task<object> Get(GetMovieRecommendations request)
         {
-            var user = _userManager.GetUserById(request.UserId.Value);
+            var user = _userManager.GetUserById(request.UserId);
 
             IEnumerable<BaseItem> movies = GetAllLibraryItems(request.UserId, _userManager, _libraryManager, request.ParentId, i => i is Movie);
 
             movies = _libraryManager.ReplaceVideosWithPrimaryVersions(movies);
 
             var listEligibleForCategories = new List<BaseItem>();
-            var listEligibleForSuggestion = new List<BaseItem> ();
+            var listEligibleForSuggestion = new List<BaseItem>();
 
             var list = movies.ToList();
 
@@ -159,29 +178,29 @@ namespace MediaBrowser.Api.Movies
             var dtoOptions = GetDtoOptions(request);
 
             dtoOptions.Fields = request.GetItemFields().ToList();
-            
+
             var result = GetRecommendationCategories(user, listEligibleForCategories, listEligibleForSuggestion, request.CategoryLimit, request.ItemLimit, dtoOptions);
 
             return ToOptimizedResult(result);
         }
 
-        private async Task<ItemsResult> GetSimilarItemsResult(BaseGetSimilarItemsFromItem request, Func<BaseItem, bool> includeInSearch, Func<BaseItem, BaseItem, int> getSimilarityScore)
+        private async Task<ItemsResult> GetSimilarItemsResult(BaseGetSimilarItemsFromItem request, Func<BaseItem, bool> includeInSearch, Func<BaseItem, List<PersonInfo>, List<PersonInfo>, BaseItem, int> getSimilarityScore)
         {
-            var user = request.UserId.HasValue ? _userManager.GetUserById(request.UserId.Value) : null;
+            var user = !string.IsNullOrWhiteSpace(request.UserId) ? _userManager.GetUserById(request.UserId) : null;
 
             var item = string.IsNullOrEmpty(request.Id) ?
-                (request.UserId.HasValue ? user.RootFolder :
+                (!string.IsNullOrWhiteSpace(request.UserId) ? user.RootFolder :
                 _libraryManager.RootFolder) : _libraryManager.GetItemById(request.Id);
 
             Func<BaseItem, bool> filter = i => i.Id != item.Id && includeInSearch(i);
-            
+
             var inputItems = user == null
                                  ? _libraryManager.RootFolder.GetRecursiveChildren(filter)
                                  : user.RootFolder.GetRecursiveChildren(user, filter);
 
             var list = inputItems.ToList();
 
-            if (item is Movie && user != null && user.Configuration.IncludeTrailersInSuggestions)
+            if (user != null && user.Configuration.IncludeTrailersInSuggestions)
             {
                 var trailerResult = await _channelManager.GetAllMediaInternal(new AllChannelMediaQuery
                 {
@@ -214,7 +233,7 @@ namespace MediaBrowser.Api.Movies
                 }
             }
 
-            var items = SimilarItemsHelper.GetSimilaritems(item, list, getSimilarityScore).ToList();
+            var items = SimilarItemsHelper.GetSimilaritems(item, _libraryManager, list, getSimilarityScore).ToList();
 
             IEnumerable<BaseItem> returnItems = items;
 
@@ -224,7 +243,7 @@ namespace MediaBrowser.Api.Movies
             }
 
             var dtoOptions = GetDtoOptions(request);
-          
+
             var result = new ItemsResult
             {
                 Items = _dtoService.GetBaseItemDtos(returnItems, dtoOptions, user).ToArray(),
@@ -339,7 +358,7 @@ namespace MediaBrowser.Api.Movies
             foreach (var director in directors)
             {
                 var items = allMovies
-                    .Where(i => i.People.Any(p => string.Equals(p.Type, PersonType.Director, StringComparison.OrdinalIgnoreCase) && string.Equals(p.Name, director, StringComparison.OrdinalIgnoreCase)))
+                    .Where(i => _libraryManager.GetPeople(i).Any(p => string.Equals(p.Type, PersonType.Director, StringComparison.OrdinalIgnoreCase) && string.Equals(p.Name, director, StringComparison.OrdinalIgnoreCase)))
                     .Take(itemLimit)
                     .ToList();
 
@@ -358,12 +377,15 @@ namespace MediaBrowser.Api.Movies
 
         private IEnumerable<RecommendationDto> GetWithActor(User user, List<BaseItem> allMovies, IEnumerable<string> names, int itemLimit, DtoOptions dtoOptions, RecommendationType type)
         {
-            var userId = user.Id;
-
             foreach (var name in names)
             {
+                var itemsWithActor = _libraryManager.GetItemIds(new InternalItemsQuery
+                {
+                    Person = name
+                });
+
                 var items = allMovies
-                    .Where(i => i.People.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    .Where(i => itemsWithActor.Contains(i.Id))
                     .Take(itemLimit)
                     .ToList();
 
@@ -382,12 +404,10 @@ namespace MediaBrowser.Api.Movies
 
         private IEnumerable<RecommendationDto> GetSimilarTo(User user, List<BaseItem> allMovies, IEnumerable<BaseItem> baselineItems, int itemLimit, DtoOptions dtoOptions, RecommendationType type)
         {
-            var userId = user.Id;
-
             foreach (var item in baselineItems)
             {
                 var similar = SimilarItemsHelper
-                    .GetSimilaritems(item, allMovies, SimilarItemsHelper.GetSimiliarityScore)
+                    .GetSimilaritems(item, _libraryManager, allMovies, SimilarItemsHelper.GetSimiliarityScore)
                     .Take(itemLimit)
                     .ToList();
 
@@ -406,18 +426,37 @@ namespace MediaBrowser.Api.Movies
 
         private IEnumerable<string> GetActors(IEnumerable<BaseItem> items)
         {
-            // Get the two leading actors for all movies
-            return items
-                .SelectMany(i => i.People.Where(p => !string.Equals(PersonType.Director, p.Type, StringComparison.OrdinalIgnoreCase)).Take(2))
+            var people = _libraryManager.GetPeople(new InternalPeopleQuery
+            {
+                ExcludePersonTypes = new List<string>
+                {
+                    PersonType.Director
+                },
+                MaxListOrder = 3
+            });
+
+            var itemIds = items.Select(i => i.Id).ToList();
+
+            return people
+                .Where(i => itemIds.Contains(i.ItemId))
                 .Select(i => i.Name)
                 .DistinctNames();
         }
 
         private IEnumerable<string> GetDirectors(IEnumerable<BaseItem> items)
         {
-            return items
-                .Select(i => i.People.FirstOrDefault(p => string.Equals(PersonType.Director, p.Type, StringComparison.OrdinalIgnoreCase)))
-                .Where(i => i != null)
+            var people = _libraryManager.GetPeople(new InternalPeopleQuery
+            {
+                PersonTypes = new List<string>
+                {
+                    PersonType.Director
+                }
+            });
+
+            var itemIds = items.Select(i => i.Id).ToList();
+
+            return people
+                .Where(i => itemIds.Contains(i.ItemId))
                 .Select(i => i.Name)
                 .DistinctNames();
         }

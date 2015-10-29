@@ -44,7 +44,7 @@
             configPageUrl :
             null;
 
-        html += "<div data-id='" + plugin.Id + "' data-name='" + plugin.Name + "' class='card backdropCard alternateHover bottomPaddedCard'>";
+        html += "<div data-id='" + plugin.Id + "' data-name='" + plugin.Name + "' class='card backdropCard bottomPaddedCard'>";
 
         html += '<div class="cardBox visualCardBox">';
         html += '<div class="cardScalable">';
@@ -84,8 +84,8 @@
 
         html += '<div class="cardFooter">';
 
-        html += '<div class="cardText" style="text-align:right; float:right;">';
-        html += '<button class="btnCardMenu" type="button" data-inline="true" data-iconpos="notext" data-icon="ellipsis-v" style="margin: 2px 0 0;"></button>';
+        html += '<div class="cardText" style="text-align:right; float:right;padding-top:5px;">';
+        html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnCardMenu"></paper-icon-button>';
         html += "</div>";
 
         html += "<div class='cardText'>";
@@ -108,16 +108,16 @@
         return html;
     }
 
-    function renderPlugins(page, plugins) {
+    function renderPlugins(page, plugins, showNoPluginsMessage) {
 
         ApiClient.getJSON(ApiClient.getUrl("dashboard/configurationpages") + "?pageType=PluginConfiguration").done(function (configPages) {
 
-            populateList(page, plugins, configPages);
+            populateList(page, plugins, configPages, showNoPluginsMessage);
 
         });
     }
 
-    function populateList(page, plugins, pluginConfigurationPages) {
+    function populateList(page, plugins, pluginConfigurationPages, showNoPluginsMessage) {
 
         plugins = plugins.sort(function (plugin1, plugin2) {
 
@@ -132,12 +132,14 @@
 
         if (!plugins.length) {
 
-            html += '<div style="padding:5px;">';
-            html += '<p>' + Globalize.translate('MessageNoPluginsInstalled') + '</p>';
-            html += '<p><a href="plugincatalog.html">';
-            html += Globalize.translate('BrowsePluginCatalogMessage');
-            html += '</a></p>';
-            html += '</div>';
+            if (showNoPluginsMessage) {
+                html += '<div style="padding:5px;">';
+                html += '<p>' + Globalize.translate('MessageNoPluginsInstalled') + '</p>';
+                html += '<p><a href="plugincatalog.html">';
+                html += Globalize.translate('BrowsePluginCatalogMessage');
+                html += '</a></p>';
+                html += '</div>';
+            }
 
             $('.installedPlugins', page).html(html).trigger('create');
         } else {
@@ -167,39 +169,43 @@
         var name = card.attr('data-name');
         var configHref = $('.cardContent', card).attr('href');
 
-        $('.cardMenu', page).popup("close").remove();
-
-        var html = '<div data-role="popup" class="cardMenu tapHoldMenu" data-theme="a">';
-
-        html += '<ul data-role="listview" style="min-width: 180px;">';
-        html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
+        var menuItems = [];
 
         if (configHref) {
-            html += '<li><a href="' + configHref + '">' + Globalize.translate('ButtonSettings') + '</a></li>';
+            menuItems.push({
+                name: Globalize.translate('ButtonSettings'),
+                id: 'open',
+                ironIcon: 'mode-edit'
+            });
         }
 
-        html += '<li><a href="#" class="btnDeletePlugin">' + Globalize.translate('ButtonUninstall') + '</a></li>';
-
-        html += '</ul>';
-
-        html += '</div>';
-
-        $(page).append(html);
-
-        var flyout = $('.cardMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
+        menuItems.push({
+            name: Globalize.translate('ButtonUninstall'),
+            id: 'delete',
+            ironIcon: 'delete'
         });
 
-        $('.btnDeletePlugin', flyout).on('click', function () {
+        require(['actionsheet'], function () {
 
-            $('.cardMenu', page).popup('close');
+            ActionSheetElement.show({
+                items: menuItems,
+                positionTo: elem,
+                callback: function (resultId) {
 
-            // jqm won't show a popup while another is in the act of closing
-            setTimeout(function () {
-                deletePlugin(page, id, name);
-            }, 300);
+                    switch (resultId) {
+
+                        case 'open':
+                            Dashboard.navigate(configHref);
+                            break;
+                        case 'delete':
+                            deletePlugin(page, id, name);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            });
+
         });
     }
 
@@ -209,7 +215,7 @@
 
         ApiClient.getInstalledPlugins().done(function (plugins) {
 
-            renderPlugins(page, plugins);
+            renderPlugins(page, plugins, true);
         });
     }
 

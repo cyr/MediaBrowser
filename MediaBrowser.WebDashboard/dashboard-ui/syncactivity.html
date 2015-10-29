@@ -4,7 +4,7 @@
     <title>${TitleSync}</title>
 </head>
 <body>
-    <div id="syncActivityPage" data-role="page" class="page type-interior syncConfigurationPage syncActivityPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Sync">
+    <div id="syncActivityPage" data-role="page" class="page type-interior syncConfigurationPage syncActivityPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Sync" data-require="scripts/syncactivity,scripts/taskbutton">
 
         <div data-role="content">
             <div class="content-primary">
@@ -15,23 +15,21 @@
                     <a href="syncsettings.html" data-role="button">${TabSettings}</a>
                 </div>
 
-                <div style="text-align:right;margin-top:-30px;">
-                    <button type="button" class="btnSync" data-icon="cloud" data-mini="true" data-inline="true">${ButtonConvertMedia}</button>
+                <div style="text-align:right;margin-top:-10px;">
+                    <paper-button raised class="btnSync"><iron-icon icon="sync"></iron-icon><span>${ButtonConvertMedia}</span></paper-button>
                     <progress max="100" min="0" style="width:100px;display:none;" class="syncProgress"></progress>
                 </div>
                 <br />
-                <div class="staticSupporterPromotion supporterPromotion syncPromotion" style="display:none;">
-                    <a class="btn btnActionAccent" href="supporter.html" style="font-size:14px;">
-                        <div>
-                            ${HeaderSyncRequiresSupporterMembership}
-                        </div>
-                        <div>
-                            ${HeaderEnjoyDayTrial}
-                        </div>
-                        <div style="font-weight:normal;font-size:90%;margin-top:5px;">
-                            ${ButtonLearnMore}
-                        </div>
-                    </a>
+                <div class="supporterPromotionContainer" style="display:none;">
+                    <div class="customSupporterPromotion supporterPromotion">
+                        <a class="btn btnActionAccent" href="http://emby.media/premiere" target="_blank" style="font-size:14px;">
+                            <div class="mainText">
+                            </div>
+                            <div class="btnLearnMore" style="font-weight:normal;font-size:90%;margin-top:5px;">
+                                ${ButtonLearnMore}
+                            </div>
+                        </a>
+                    </div>
                 </div>
                 <div class="syncActivity">
 

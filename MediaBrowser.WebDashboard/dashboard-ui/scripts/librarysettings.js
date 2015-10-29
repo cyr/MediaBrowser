@@ -10,14 +10,33 @@
 
         $('#txtSeasonZeroName', page).val(config.SeasonZeroDisplayName);
 
-        $('#chkEnableRealtimeMonitor', page).checked(config.EnableRealtimeMonitor).checkboxradio("refresh");
-
-        $('#txtItemsByNamePath', page).val(config.ItemsByNamePath || '');
+        $('#selectEnableRealtimeMonitor', page).val(config.EnableLibraryMonitor);
 
         $('#chkEnableAudioArchiveFiles', page).checked(config.EnableAudioArchiveFiles).checkboxradio("refresh");
         $('#chkEnableVideoArchiveFiles', page).checked(config.EnableVideoArchiveFiles).checkboxradio("refresh");
 
         Dashboard.hideLoadingMsg();
+    }
+
+    function onSubmit() {
+        Dashboard.showLoadingMsg();
+
+        var form = this;
+
+        ApiClient.getServerConfiguration().done(function (config) {
+
+            config.SeasonZeroDisplayName = $('#txtSeasonZeroName', form).val();
+
+            config.EnableLibraryMonitor = $('#selectEnableRealtimeMonitor', form).val();
+
+            config.EnableAudioArchiveFiles = $('#chkEnableAudioArchiveFiles', form).checked();
+            config.EnableVideoArchiveFiles = $('#chkEnableVideoArchiveFiles', form).checked();
+
+            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+        });
+
+        // Disable default form submission
+        return false;
     }
 
     $(document).on('pageshow', "#librarySettingsPage", function () {
@@ -36,55 +55,16 @@
 
         var page = this;
 
-        $('#btnSelectIBNPath', page).on("click.selectDirectory", function () {
+        $('.librarySettingsForm').off('submit', onSubmit).on('submit', onSubmit);
 
-            var picker = new DirectoryBrowser(page);
+        ApiClient.getSystemInfo().done(function (systemInfo) {
 
-            picker.show({
-
-                callback: function (path) {
-
-                    if (path) {
-                        $('#txtItemsByNamePath', page).val(path);
-                    }
-                    picker.close();
-                },
-
-                header: Globalize.translate('HeaderSelectImagesByNamePath'),
-
-                instruction: Globalize.translate('HeaderSelectImagesByNamePathHelp')
-            });
+            if (systemInfo.SupportsLibraryMonitor) {
+                page.querySelector('.fldLibraryMonitor').classList.remove('hide');
+            } else {
+                page.querySelector('.fldLibraryMonitor').classList.add('hide');
+            }
         });
     });
-
-    function librarySettingsPage() {
-
-        var self = this;
-
-        self.onSubmit = function () {
-            Dashboard.showLoadingMsg();
-
-            var form = this;
-
-            ApiClient.getServerConfiguration().done(function (config) {
-
-                config.ItemsByNamePath = $('#txtItemsByNamePath', form).val();
-
-                config.SeasonZeroDisplayName = $('#txtSeasonZeroName', form).val();
-
-                config.EnableRealtimeMonitor = $('#chkEnableRealtimeMonitor', form).checked();
-
-                config.EnableAudioArchiveFiles = $('#chkEnableAudioArchiveFiles', form).checked();
-                config.EnableVideoArchiveFiles = $('#chkEnableVideoArchiveFiles', form).checked();
-
-                ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
-            });
-
-            // Disable default form submission
-            return false;
-        };
-    }
-
-    window.LibrarySettingsPage = new librarySettingsPage();
 
 })(jQuery, document, window);

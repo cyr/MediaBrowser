@@ -40,7 +40,9 @@
         }
     }
 
-    function onSubmit(page) {
+    function onSubmit() {
+
+        var page = $(this).parents('.page');
 
         ApiClient.ajax({
 
@@ -55,18 +57,15 @@
 
             processForgotPasswordResult(page, result);
         });
+
+        return false;
     }
 
-    window.ForgotPasswordPage = {
 
-        onSubmit: function () {
+    $(document).on('pageinit', '#forgotPasswordPage', function () {
 
-            var page = $(this).parents('.page');
-
-            onSubmit(page);
-            return false;
-        }
-
-    };
+        var page = this;
+        $('.forgotPasswordForm', page).off('submit', onSubmit).on('submit', onSubmit);
+    });
 
 })(window);

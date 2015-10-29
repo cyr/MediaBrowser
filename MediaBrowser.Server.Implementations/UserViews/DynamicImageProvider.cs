@@ -11,23 +11,21 @@ using MediaBrowser.Server.Implementations.Photos;
 using MoreLinq;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.UserViews
 {
     public class DynamicImageProvider : BaseDynamicImageProvider<UserView>
     {
         private readonly IUserManager _userManager;
-        private readonly ILibraryManager _libraryManager;
 
-        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, ILibraryManager libraryManager)
+        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager)
             : base(fileSystem, providerManager, applicationPaths, imageProcessor)
         {
             _userManager = userManager;
-            _libraryManager = libraryManager;
         }
 
         public override IEnumerable<ImageType> GetSupportedImages(IHasImages item)
@@ -43,19 +41,13 @@ namespace MediaBrowser.Server.Implementations.UserViews
 
             return new List<ImageType>
             {
-                ImageType.Primary,
-                ImageType.Thumb
+                ImageType.Primary
             };
         }
 
         protected override async Task<List<BaseItem>> GetItemsWithImages(IHasImages item)
         {
             var view = (UserView)item;
-
-            if (!view.UserId.HasValue)
-            {
-                return new List<BaseItem>();
-            }
 
             if (string.Equals(view.ViewType, CollectionType.LiveTv, StringComparison.OrdinalIgnoreCase))
             {
@@ -69,7 +61,6 @@ namespace MediaBrowser.Server.Implementations.UserViews
             {
                 var userItemsResult = await view.GetItems(new InternalItemsQuery
                 {
-                    User = _userManager.GetUserById(view.UserId.Value),
                     CollapseBoxSetItems = false
                 });
 
@@ -77,14 +68,14 @@ namespace MediaBrowser.Server.Implementations.UserViews
             }
 
             var isUsingCollectionStrip = IsUsingCollectionStrip(view);
-            var recursive = isUsingCollectionStrip && !new[] { CollectionType.Playlists, CollectionType.Channels }.Contains(view.ViewType ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+            var recursive = isUsingCollectionStrip && !new[] { CollectionType.Channels, CollectionType.BoxSets, CollectionType.Playlists }.Contains(view.ViewType ?? string.Empty, StringComparer.OrdinalIgnoreCase);
 
             var result = await view.GetItems(new InternalItemsQuery
             {
-                User = _userManager.GetUserById(view.UserId.Value),
+                User = (view.UserId.HasValue ? _userManager.GetUserById(view.UserId.Value) : null),
                 CollapseBoxSetItems = false,
                 Recursive = recursive,
-                ExcludeItemTypes = new[] { "UserView", "CollectionFolder", "Playlist" }
+                ExcludeItemTypes = new[] { "UserView", "CollectionFolder" }
 
             }).ConfigureAwait(false);
 
@@ -122,7 +113,7 @@ namespace MediaBrowser.Server.Implementations.UserViews
                 var audio = i as Audio;
                 if (audio != null)
                 {
-                    var album = audio.FindParent<MusicAlbum>();
+                    var album = audio.AlbumEntity;
                     if (album != null && album.HasImage(ImageType.Primary))
                     {
                         return album;
@@ -141,54 +132,12 @@ namespace MediaBrowser.Server.Implementations.UserViews
             return GetFinalItems(items.Where(i => i.HasImage(ImageType.Primary)).ToList());
         }
 
-        public override bool Supports(IHasImages item)
+        protected override bool Supports(IHasImages item)
         {
             var view = item as UserView;
-
-            if (view != null && view.UserId.HasValue)
+            if (view != null)
             {
-                var supported = new[]
-                {
-                    SpecialFolder.TvFavoriteEpisodes,
-                    SpecialFolder.TvFavoriteSeries,
-                    SpecialFolder.TvGenres,
-                    SpecialFolder.TvGenre,
-                    SpecialFolder.TvLatest,
-                    SpecialFolder.TvNextUp,
-                    SpecialFolder.TvResume,
-                    SpecialFolder.TvShowSeries,
-
-                    SpecialFolder.MovieCollections,
-                    SpecialFolder.MovieFavorites,
-                    SpecialFolder.MovieGenres,
-                    SpecialFolder.MovieGenre,
-                    SpecialFolder.MovieLatest,
-                    SpecialFolder.MovieMovies,
-                    SpecialFolder.MovieResume,
-
-                    SpecialFolder.GameFavorites,
-                    SpecialFolder.GameGenres,
-                    SpecialFolder.GameGenre,
-                    SpecialFolder.GameSystems,
-                    SpecialFolder.LatestGames,
-                    SpecialFolder.RecentlyPlayedGames,
-
-                    SpecialFolder.MusicArtists,
-                    SpecialFolder.MusicAlbumArtists,
-                    SpecialFolder.MusicAlbums,
-                    SpecialFolder.MusicGenres,
-                    SpecialFolder.MusicGenre,
-                    SpecialFolder.MusicLatest,
-                    SpecialFolder.MusicPlaylists,
-                    SpecialFolder.MusicSongs,
-                    SpecialFolder.MusicFavorites,
-                    SpecialFolder.MusicFavoriteArtists,
-                    SpecialFolder.MusicFavoriteAlbums,
-                    SpecialFolder.MusicFavoriteSongs
-                };
-
-                return (IsUsingCollectionStrip(view) || supported.Contains(view.ViewType, StringComparer.OrdinalIgnoreCase)) &&
-                    _userManager.GetUserById(view.UserId.Value) != null;
+                return (IsUsingCollectionStrip(view));
             }
 
             return false;
@@ -200,71 +149,35 @@ namespace MediaBrowser.Server.Implementations.UserViews
             {
                 CollectionType.Movies,
                 CollectionType.TvShows,
-                CollectionType.Games,
                 CollectionType.Music,
+                CollectionType.Games,
+                CollectionType.Books,
+                CollectionType.MusicVideos,
+                CollectionType.HomeVideos,
                 CollectionType.BoxSets,
                 CollectionType.Playlists,
-                CollectionType.Channels,
-                CollectionType.LiveTv,
-                CollectionType.Books,
-                CollectionType.Photos,
-                CollectionType.HomeVideos,
-                CollectionType.MusicVideos,
-                string.Empty
+                CollectionType.Photos
             };
 
             return collectionStripViewTypes.Contains(view.ViewType ?? string.Empty);
         }
 
-        protected override async Task<bool> CreateImage(IHasImages item, List<BaseItem> itemsWithImages, string outputPath, ImageType imageType, int imageIndex)
+        protected override async Task<string> CreateImage(IHasImages item, List<BaseItem> itemsWithImages, string outputPathWithoutExtension, ImageType imageType, int imageIndex)
         {
+            var outputPath = Path.ChangeExtension(outputPathWithoutExtension, ".png");
+
             var view = (UserView)item;
             if (imageType == ImageType.Primary && IsUsingCollectionStrip(view))
             {
-                if (itemsWithImages.Count == 0 && !string.Equals(view.ViewType, CollectionType.LiveTv, StringComparison.OrdinalIgnoreCase))
+                if (itemsWithImages.Count == 0)
                 {
-                    return false;
+                    return null;
                 }
 
-                await CreateThumbCollage(item, itemsWithImages, outputPath, 960, 540, false, item.Name).ConfigureAwait(false);
-                return true;
+                return await CreateThumbCollage(item, itemsWithImages, outputPath, 960, 540).ConfigureAwait(false);
             }
 
             return await base.CreateImage(item, itemsWithImages, outputPath, imageType, imageIndex).ConfigureAwait(false);
-        }
-
-        protected override IEnumerable<String> GetStripCollageImagePaths(IHasImages primaryItem, IEnumerable<BaseItem> items)
-        {
-            var userView = primaryItem as UserView;
-
-            if (userView != null && string.Equals(userView.ViewType, CollectionType.LiveTv, StringComparison.OrdinalIgnoreCase))
-            {
-                var list = new List<string>();
-                for (int i = 1; i <= 8; i++)
-                {
-                    list.Add(ExtractLiveTvResource(i.ToString(CultureInfo.InvariantCulture), ApplicationPaths));
-                }
-                return list;
-            }
-
-            return base.GetStripCollageImagePaths(primaryItem, items);
-        }
-
-        private string ExtractLiveTvResource(string name, IApplicationPaths paths)
-        {
-            var namespacePath = GetType().Namespace + ".livetv." + name + ".jpg";
-            var tempPath = Path.Combine(paths.TempDirectory, Guid.NewGuid().ToString("N") + ".jpg");
-            Directory.CreateDirectory(Path.GetDirectoryName(tempPath));
-
-            using (var stream = GetType().Assembly.GetManifestResourceStream(namespacePath))
-            {
-                using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.Read))
-                {
-                    stream.CopyTo(fileStream);
-                }
-            }
-
-            return tempPath;
         }
     }
 }

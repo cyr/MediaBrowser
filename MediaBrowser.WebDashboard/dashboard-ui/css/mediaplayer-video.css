@@ -17,7 +17,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #222;
+    background-color: #000;
+    color: #fff;
 }
 
 .itemVideo {
@@ -36,8 +37,6 @@
 }
 
 .videoControls {
-    padding: 0 .5em;
-    background-color: rgba(0, 0, 0, .8);
     position: fixed;
     left: 0;
     bottom: 0;
@@ -46,8 +45,12 @@
     text-align: center;
 }
 
+    .videoControls > div {
+        background-color: rgba(0, 0, 0, .7);
+    }
+
 .videoTopControls {
-    padding: .7em 1em;
+    padding: 0 1em;
     background-color: rgba(0, 0, 0, .5);
     position: absolute;
     left: 0;
@@ -59,51 +62,144 @@
 .videoAdvancedControls {
     text-align: right;
     vertical-align: top;
+    padding-top: .5em;
 }
 
-.videoControls .currentTime {
-    margin-top: 25px;
-}
-
-#slider-tooltip {
-    z-index: 99999;
-    position: absolute;
-    top: -30px;
-    left: 0;
-    background-color: #eee;
-    border: 1px solid #333;
-    color: #333;
-    border-radius: 3px;
-    padding: 5px;
-}
+    .videoAdvancedControls paper-icon-button {
+        width: 30px;
+        height: 30px;
+    }
 
 .nowPlayingInfo {
-    position: fixed;
-    bottom: 8px;
-    left: 10px;
-    z-index: 99999;
+    text-align: center;
+    padding: 1.5em 1em 2em 1em;
 }
 
-#videoPlayer .nowPlayingInfo img {
+.guide {
+    height: 400px;
+    overflow: auto;
+    background-color: #000 !important;
+}
+
+    .guide .tvGuideHeader {
+        position: static !important;
+    }
+
+    .guide .programContainer {
+        margin-top: 0 !important;
+    }
+
+#videoPlayer .nowPlayingImage img {
     height: auto !important;
-    max-width: 100px;
-    max-height: 200px;
+    max-width: 180px;
+    max-height: 220px;
+}
+
+#videoPlayer .nowPlayingTabs {
+    margin: 0 0 0 1em;
+    overflow: hidden;
+    white-space: normal;
+    text-overflow: ellipsis;
+    text-align: left;
+    vertical-align: top;
+    color: #eee;
+    display: inline-block;
+    width: 70%;
+    font-weight: normal;
+    font-size: 14px;
+}
+
+.videoPositionSlider {
+    width: 300px;
+    vertical-align: middle;
+    margin-left: -1em;
+}
+
+@media all and (max-width: 440px) {
+    .videoPositionSlider {
+        width: 240px;
+    }
+}
+
+@media all and (max-width: 400px) {
+    .videoPositionSlider {
+        width: 220px;
+    }
+}
+
+@media all and (max-width: 350px) {
+    .videoPositionSlider {
+        width: 200px;
+    }
+}
+
+@media all and (max-width: 320px) {
+    .videoPositionSlider {
+        width: 170px;
+    }
+}
+
+@media all and (max-width: 1200px) {
+    #videoPlayer .nowPlayingTabs {
+        font-size: 13px;
+    }
+}
+
+.nowPlayingTabButtons {
+    margin-bottom: 1.25em;
+}
+
+.nowPlayingTabButton {
+    display: inline-block;
+    font-size: 18px;
+    text-transform: uppercase;
+    color: #ddd !important;
+    font-weight: 400 !important;
+    text-decoration: none;
+}
+
+    .nowPlayingTabButton + .nowPlayingTabButton {
+        padding-left: 1.5em;
+    }
+
+    .nowPlayingTabButton:not(.selectedNowPlayingTabButton):hover {
+        color: white !important;
+    }
+
+.selectedNowPlayingTabButton {
+    color: #2ad !important;
+}
+
+.nowPlayingTab {
+    overflow-y: hidden;
+    overflow-x: auto;
 }
 
 #videoPlayer .nowPlayingText {
     font-weight: normal;
-    margin: 0 0 0 5px;
-    max-width: 150px;
+    margin: 0 0 0 1em;
+    max-width: initial;
     overflow: hidden;
-    white-space: nowrap;
+    white-space: normal;
     text-overflow: ellipsis;
     text-align: left;
-    vertical-align: bottom;
+    vertical-align: top;
     position: static;
+    color: #eee;
+}
+
+.videoNowPlayingName {
+    font-size: 18px;
+}
+
+.videoNowPlayingOverview, .videoNowPlayingRating {
+    margin: 1em 0;
 }
 
 .videoTopControlsLogo {
     float: left;
+    /* Matches .mediaButton */
+    padding: 10px 0;
 }
 
     .videoTopControlsLogo img {
@@ -129,26 +225,12 @@
     max-height: 100%;
 }
 
-/* Hack for safari because it doesn't allow clickable content over the video surface. */
-/*.itemVideo { (;top: 9%!important;height: 91% !important;); }
-.itemVideo { [;top: 9%!important;height: 91% !important;]; }*/
-
-#mediaPlayer .ui-slider-track, .nowPlayingBar .ui-slider-track, .nowPlayingPage .ui-slider-track {
-    border-color: #2ad !important;
-    height: 2px!important;
-}
-
-#videoPlayer .inactive {
-    display: none!important;
-}
+    #videoPlayer .inactive {
+        display: none !important;
+    }
 
 .idlePlayer video {
     cursor: none;
-}
-
-#mediaPlayer .sliderContainer {
-    position: relative;
-    top: 5px;
 }
 
 /****************************************/
@@ -156,58 +238,35 @@
 @media all and (max-width: 1200px), all and (max-height: 720px) {
     .videoControls .currentTime {
         margin-right: 0;
-        min-width: 120px;
-    }
-
-    .videoControls .nowPlayingText {
-        max-width: 160px;
-    }
-
-    #mediaPlayer .nowPlayingImage {
-        display: none;
     }
 }
 
-@media all and (max-width: 960px), all and (max-height: 550px) {
-    .videoControls .nowPlayingText {
-        max-width: 90px;
-    }
-}
+@media all and (max-width: 1400px), all and (max-height: 900px) {
 
-@media all and (max-width: 800px), all and (max-height: 460px) {
-
-    #mediaPlayer .sliderContainer {
-        margin-top: 8px;
-    }
-}
-
-@media all and (max-width: 1000px), all and (max-height: 460px) {
-
-    #mediaPlayer .nowPlayingImage, #mediaPlayer .nowPlayingText {
-        display: none;
+    .mediaButton.infoButton {
+        display: none !important;
     }
 }
 
 @media all and (max-width: 555px) {
     #mediaPlayer .videoControls .previousTrackButton, #mediaPlayer .videoControls .nextTrackButton {
-        display: none!important;
+        display: none !important;
     }
+
     .videoTopControlsLogo {
-        display: none!important;
+        display: none !important;
     }
 }
 
-@media all and (min-width: 800px) {
-    .videoControls .positionSliderContainer {
-        width: 300px;
+@media all and (min-width: 1400px) {
+    .nowPlayingInfo {
+        padding-bottom: 0;
     }
-}
 
-@media all and (min-width: 1300px) {
-    #videoPlayer .nowPlayingInfo img {
+    #videoPlayer .nowPlayingImage img {
         height: auto !important;
-        max-width: 150px;
-        max-height: 300px;
+        max-width: 360px;
+        max-height: 220px;
     }
 }
 
@@ -287,43 +346,5 @@
     100% {
         -webkit-transform: scale(1);
         opacity: 0;
-    }
-}
-
-.videoPlayerPopupContent {
-    width: 200px;
-}
-
-.videoChaptersPopup .videoPlayerPopupContent {
-    width: 300px;
-}
-
-.videoChapterPopupImage {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 80px;
-    height: 80px;
-    background-repeat: no-repeat;
-    background-size: cover;
-    background-position: center center;
-}
-
-.videoPlayerPopupScroller {
-    overflow-y: auto;
-    overflow-x: hidden;
-    max-height: 180px;
-}
-
-@media all and (min-height: 500px) {
-    .videoPlayerPopupScroller {
-        max-height: 300px;
-    }
-}
-
-
-@media all and (min-height: 600px) {
-    .videoPlayerPopupScroller {
-        max-height: 400px;
     }
 }

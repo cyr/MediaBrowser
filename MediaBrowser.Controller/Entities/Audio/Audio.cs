@@ -24,14 +24,20 @@ namespace MediaBrowser.Controller.Entities.Audio
         IThemeMedia,
         IArchivable
     {
-        public string FormatName { get; set; }
         public long? Size { get; set; }
         public string Container { get; set; }
         public int? TotalBitrate { get; set; }
         public List<string> Tags { get; set; }
-        public ExtraType ExtraType { get; set; }
+        public ExtraType? ExtraType { get; set; }
 
-        public bool IsThemeMedia { get; set; }
+        [IgnoreDataMember]
+        public bool IsThemeMedia
+        {
+            get
+            {
+                return ExtraType.HasValue && ExtraType.Value == Model.Entities.ExtraType.ThemeSong;
+            }
+        }
 
         public Audio()
         {
@@ -44,40 +50,6 @@ namespace MediaBrowser.Controller.Entities.Audio
         public override bool SupportsAddingToPlaylist
         {
             get { return LocationType == LocationType.FileSystem && RunTimeTicks.HasValue; }
-        }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether this instance has embedded image.
-        /// </summary>
-        /// <value><c>true</c> if this instance has embedded image; otherwise, <c>false</c>.</value>
-        public bool HasEmbeddedImage { get; set; }
-
-        /// <summary>
-        /// Override this to true if class should be grouped under a container in indicies
-        /// The container class should be defined via IndexContainer
-        /// </summary>
-        /// <value><c>true</c> if [group in index]; otherwise, <c>false</c>.</value>
-        [IgnoreDataMember]
-        public override bool GroupInIndex
-        {
-            get
-            {
-                return true;
-            }
-        }
-
-        /// <summary>
-        /// Override this to return the folder that should be used to construct a container
-        /// for this item in an index.  GroupInIndex should be true as well.
-        /// </summary>
-        /// <value>The index container.</value>
-        [IgnoreDataMember]
-        public override Folder IndexContainer
-        {
-            get
-            {
-                return LatestItemsIndexContainer ?? new MusicAlbum { Name = "Unknown Album" };
-            }
         }
 
         [IgnoreDataMember]
@@ -94,7 +66,7 @@ namespace MediaBrowser.Controller.Entities.Audio
         {
             get
             {
-                return Parents.OfType<MusicAlbum>().FirstOrDefault();
+                return AlbumEntity;
             }
         }
 
@@ -148,6 +120,12 @@ namespace MediaBrowser.Controller.Entities.Audio
         /// <value>The album.</value>
         public string Album { get; set; }
 
+        [IgnoreDataMember]
+        public MusicAlbum AlbumEntity
+        {
+            get { return FindParent<MusicAlbum>(); }
+        }
+
         /// <summary>
         /// Gets the type of the media.
         /// </summary>
@@ -177,7 +155,7 @@ namespace MediaBrowser.Controller.Entities.Audio
         /// <returns>System.String.</returns>
         protected override string CreateUserDataKey()
         {
-            var parent = FindParent<MusicAlbum>();
+            var parent = AlbumEntity;
 
             if (parent != null)
             {
@@ -234,8 +212,7 @@ namespace MediaBrowser.Controller.Entities.Audio
                 Path = enablePathSubstituion ? GetMappedPath(i.Path, locationType) : i.Path,
                 RunTimeTicks = i.RunTimeTicks,
                 Container = i.Container,
-                Size = i.Size,
-                Formats = (i.FormatName ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList()
+                Size = i.Size
             };
 
             if (string.IsNullOrEmpty(info.Container))

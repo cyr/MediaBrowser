@@ -18,7 +18,7 @@
 
     function getSavedQueryKey() {
 
-        return 'games' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function reloadItems(page) {
@@ -28,7 +28,7 @@
         ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
 
             var html = '';
 
@@ -38,7 +38,7 @@
                 totalRecordCount: result.TotalRecordCount,
                 viewButton: true,
                 showLimit: false
-            })).trigger('create');
+            }));
 
             updateFilterControls(page);
             var trigger = false;
@@ -50,7 +50,6 @@
                     context: 'games',
                     sortBy: query.SortBy
                 });
-                trigger = true;
             }
             else if (view == "Poster") {
                 html = LibraryBrowser.getPosterViewHtml({
@@ -73,11 +72,9 @@
                 });
             }
 
-            $('#items', page).html(html).lazyChildren();
-
-            if (trigger) {
-                $('#items', page).trigger('create');
-            }
+            var elem = page.querySelector('#items');
+            elem.innerHTML = html;
+            ImageLoader.lazyChildren(elem);
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
@@ -132,10 +129,10 @@
 
         }).checkboxradio('refresh');
 
-        $('#selectView', page).val(view).selectmenu('refresh');
+        $('#selectView', page).val(view);
 
         $('.alphabetPicker', page).alphaValue(query.NameStartsWith);
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
+        $('#selectPageSize', page).val(query.Limit);
     }
 
     var filtersLoaded;
@@ -260,13 +257,11 @@
         LibraryBrowser.getSavedViewSetting(viewkey).done(function (val) {
 
             if (val) {
-                $('#selectView', page).val(val).selectmenu('refresh').trigger('change');
+                $('#selectView', page).val(val).trigger('change');
             } else {
                 reloadItems(page);
             }
         });
-
-    }).on('pageshow', "#gamesPage", function () {
 
         updateFilterControls(this);
     });

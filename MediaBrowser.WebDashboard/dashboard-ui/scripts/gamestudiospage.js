@@ -13,7 +13,7 @@
 
     function getSavedQueryKey() {
 
-        return 'gamestudios' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function reloadItems(page) {
@@ -23,7 +23,7 @@
         ApiClient.getStudios(Dashboard.getCurrentUserId(), query).done(function (result) {
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
 
             var html = '';
 
@@ -33,7 +33,7 @@
                 totalRecordCount: result.TotalRecordCount,
                 viewButton: true,
                 showLimit: false
-            })).trigger('create');
+            }));
 
             updateFilterControls(page);
 
@@ -48,7 +48,9 @@
                 
             });
 
-            $('#items', page).html(html).lazyChildren();
+            var elem = page.querySelector('#items');
+            elem.innerHTML = html;
+            ImageLoader.lazyChildren(elem);
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
@@ -68,7 +70,7 @@
 
     function updateFilterControls(page) {
 
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
+        $('#selectPageSize', page).val(query.Limit);
     }
 
     $(document).on('pageinit', "#gameStudiosPage", function () {
@@ -113,8 +115,6 @@
         LibraryBrowser.loadSavedQueryValues(getSavedQueryKey(), query);
 
         reloadItems(this);
-
-    }).on('pageshow', "#gameStudiosPage", function () {
 
         updateFilterControls(this);
     });

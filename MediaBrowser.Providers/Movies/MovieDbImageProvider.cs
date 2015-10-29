@@ -1,4 +1,5 @@
-﻿using MediaBrowser.Common.Net;
+﻿using System.Globalization;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -41,11 +42,21 @@ namespace MediaBrowser.Providers.Movies
 
         public bool Supports(IHasImages item)
         {
-            var channelItem = item as ChannelVideoItem;
+            var channelItem = item as IChannelMediaItem;
 
-            if (channelItem != null && channelItem.ContentType == ChannelMediaContentType.MovieExtra && channelItem.ExtraType == ExtraType.Trailer)
+            if (channelItem != null)
             {
-                return true;
+                if (channelItem.ContentType == ChannelMediaContentType.Movie)
+                {
+                    return true;
+                }
+                if (channelItem.ContentType == ChannelMediaContentType.MovieExtra)
+                {
+                    if (channelItem.ExtraType == ExtraType.Trailer)
+                    {
+                        return true;
+                    }
+                }
             }
 
             // Supports images for tv movies
@@ -55,21 +66,11 @@ namespace MediaBrowser.Providers.Movies
                 return true;
             }
 
-            // Don't support local trailers
             return item is Movie || item is MusicVideo;
         }
 
         public IEnumerable<ImageType> GetSupportedImages(IHasImages item)
         {
-            if (item is ChannelVideoItem || item is LiveTvProgram)
-            {
-                // Too many channel items to allow backdrops here
-                return new List<ImageType>
-                {
-                    ImageType.Primary
-                };
-            }
-
             return new List<ImageType>
             {
                 ImageType.Primary, 
@@ -191,7 +192,20 @@ namespace MediaBrowser.Providers.Movies
             var tmdbId = item.GetProviderId(MetadataProviders.Tmdb);
             var language = item.GetPreferredMetadataLanguage();
 
-            if (string.IsNullOrEmpty(tmdbId))
+            if (string.IsNullOrWhiteSpace(tmdbId))
+            {
+                var imdbId = item.GetProviderId(MetadataProviders.Imdb);
+                if (!string.IsNullOrWhiteSpace(imdbId))
+                {
+                    var movieInfo = await MovieDbProvider.Current.FetchMainResult(imdbId, false, language, cancellationToken).ConfigureAwait(false);
+                    if (movieInfo != null)
+                    {
+                        tmdbId = movieInfo.id.ToString(CultureInfo.InvariantCulture);
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(tmdbId))
             {
                 return null;
             }

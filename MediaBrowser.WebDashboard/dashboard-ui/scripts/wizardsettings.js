@@ -11,8 +11,8 @@
 
             config.PreferredMetadataLanguage = $('#selectLanguage', page).val();
             config.MetadataCountryCode = $('#selectCountry', page).val();
-            config.SaveLocalMeta = $('#chkSaveLocalMetadata', page).checked();
-            config.EnableInternetProviders = $('#chkEnableInternetProviders', page).checked();
+            config.SaveLocalMeta = page.querySelector('.chkSaveLocalMetadata').checked;
+            config.EnableInternetProviders = page.querySelector('.chkEnableInternetProviders').checked;
 
             apiClient.ajax({
 
@@ -34,8 +34,8 @@
         Dashboard.populateLanguages($('#selectLanguage', page), cultures);
         Dashboard.populateCountries($('#selectCountry', page), countries);
 
-        $('#selectLanguage', page).val(config.PreferredMetadataLanguage).selectmenu("refresh");
-        $('#selectCountry', page).val(config.MetadataCountryCode).selectmenu("refresh");
+        $('#selectLanguage', page).val(config.PreferredMetadataLanguage);
+        $('#selectCountry', page).val(config.MetadataCountryCode);
 
         Dashboard.hideLoadingMsg();
     }
@@ -59,37 +59,28 @@
 
     function navigateToNextPage() {
 
-        var apiClient = ApiClient;
-
-        apiClient.getJSON(apiClient.getUrl('Startup/Info')).done(function (info) {
-
-            if (info.SupportsRunningAsService) {
-                Dashboard.navigate('wizardservice.html');
-
-            } else {
-                Dashboard.navigate('wizardagreement.html');
-            }
-        });
+        Dashboard.navigate('wizardlivetvtuner.html');
     }
 
-    $(document).on('pageshow', "#wizardSettingsPage", function () {
+    function onSubmit() {
+        var form = this;
+
+        save(form);
+
+        return false;
+    }
+
+    $(document).on('pageinit', "#wizardSettingsPage", function () {
+
+        var page = this;
+
+        $('.wizardSettingsForm', page).off('submit', onSubmit).on('submit', onSubmit);
+
+    }).on('pageshow', "#wizardSettingsPage", function () {
 
         var page = this;
 
         reload(page);
     });
-
-    window.WizardSettingsPage = {
-
-        onSubmit: function () {
-
-            var form = this;
-
-            save(form);
-
-            return false;
-        }
-
-    };
 
 })(jQuery, document, window);

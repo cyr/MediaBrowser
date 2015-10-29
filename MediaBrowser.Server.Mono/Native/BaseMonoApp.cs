@@ -13,6 +13,12 @@ namespace MediaBrowser.Server.Mono.Native
 {
     public abstract class BaseMonoApp : INativeApp
     {
+        protected StartupOptions StartupOptions { get; private set; }
+        protected BaseMonoApp(StartupOptions startupOptions)
+        {
+            StartupOptions = startupOptions;
+        }
+
         /// <summary>
         /// Shutdowns this instance.
         /// </summary>
@@ -21,16 +27,16 @@ namespace MediaBrowser.Server.Mono.Native
         /// <summary>
         /// Restarts this instance.
         /// </summary>
-        public void Restart()
+        public virtual void Restart(StartupOptions startupOptions)
         {
-            
+            throw new NotImplementedException();
         }
 
         /// <summary>
         /// Determines whether this instance [can self restart].
         /// </summary>
         /// <returns><c>true</c> if this instance [can self restart]; otherwise, <c>false</c>.</returns>
-        public bool CanSelfRestart
+        public virtual bool CanSelfRestart
         {
             get
             {
@@ -109,6 +115,14 @@ namespace MediaBrowser.Server.Mono.Native
             }
         }
 
+        public bool SupportsLibraryMonitor
+        {
+            get
+            {
+                return false;
+            }
+        }
+
         public void ConfigureAutoRun(bool autorun)
         {
         }
@@ -165,6 +179,7 @@ namespace MediaBrowser.Server.Mono.Native
         }
 
         private Uname _unixName;
+
         private Uname GetUnixName()
         {
             if (_unixName == null)

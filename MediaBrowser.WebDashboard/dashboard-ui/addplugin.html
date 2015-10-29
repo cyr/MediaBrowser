@@ -4,7 +4,7 @@
     <title>${TitlePlugins}</title>
 </head>
 <body>
-    <div id="addPluginPage" data-role="page" class="page type-interior pluginConfigurationPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Plugins">
+    <div id="addPluginPage" data-role="page" class="page type-interior pluginConfigurationPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Plugins" data-require="scripts/registrationservices,scripts/ratingdialog,scripts/addpluginpage">
 
         <div data-role="content">
             <div class="content-primary">
@@ -19,9 +19,9 @@
                     <a href="syncsettings.html" data-role="button">${TabSettings}</a>
                 </div>
                 <div data-role="controlgroup" data-type="horizontal" class="localnav livetvTabs" data-mini="true" style="display:none;">
-                    <a href="livetvstatus.html" data-role="button">${TabStatus}</a>
-                    <a href="#" data-role="button" class="ui-btn-active">${TabServices}</a>
+                    <a href="livetvstatus.html" data-role="button">${TabTuners}</a>
                     <a href="livetvsettings.html" data-role="button">${TabSettings}</a>
+                    <a href="#" data-role="button" class="ui-btn-active">${TabExternalServices}</a>
                 </div>
 
                 <div data-role="controlgroup" data-type="horizontal" class="localnav notificationsTabs" data-mini="true" style="display:none;">
@@ -55,6 +55,7 @@
                             </form>
 
                             <div class="premiumPackage" style="display: none; margin-top: 1.5em;">
+                                <!--CORDOVA_EXCLUDE_START-->
                                 <div>
                                     <form name="_xclick" action="https://www.paypal.com/cgi-bin/webscr" method="post">
                                         <p id="regStatus">
@@ -63,16 +64,16 @@
                                         </p>
                                         <div class="supporterDescription">
 
-                                            <p>${MessageSupporterPluginRequiresMembership}</p>
+                                            <p>${MessagePluginRequiresSubscription}</p>
 
-                                            <p><a href="supporter.html">${LinkSupporterMembership}</a></p>
+                                            <p><a href="http://emby.media/premiere" target="_blank">${LinkLearnMoreAboutSubscription}</a></p>
 
                                         </div>
                                         <div class="premiumDescription">
 
                                             <p>${MessagePremiumPluginRequiresMembership}</p>
 
-                                            <p><a href="supporter.html">${LinkSupporterMembership}</a></p>
+                                            <p><a href="http://emby.media/premiere" target="_blank">${LinkLearnMoreAboutSubscription}</a></p>
                                         </div>
                                         <div class="premiumHasPrice" style="display: none">
                                             <p id="regPrice">
@@ -85,15 +86,17 @@
                                             <input type="hidden" id="featureId" name="item_number" value="">
                                             <input type="hidden" name="notify_url" value="http://mb3admin.com/admin/service/services/ppipn.php">
                                             <input type="hidden" name="return" id="paypalReturnUrl" value="#">
-                                            <button type="submit" id="ppButton" data-role="none" class="btn" style="background-color:#179BD7">
-                                                <i class="fa fa-paypal"></i>
-                                                <span>${RegisterWithPayPal}</span>
+                                            <button type="submit" id="ppButton" class="clearButton">
+                                                <paper-button raised class="block" style="background-color: #179BD7;color:#fff;">
+                                                    <iron-icon icon="check"></iron-icon>
+                                                    <span>${RegisterWithPayPal}</span>
+                                                </paper-button>
                                             </button>
 
                                         </div>
                                     </form>
                                 </div>
-
+                                <!--CORDOVA_EXCLUDE_END-->
                             </div>
                         </div>
                     </div>
@@ -124,9 +127,6 @@
                 </div>
             </div>
         </div>
-        <script type="text/javascript">
-            $('.addPluginForm').off('submit', AddPluginPage.onSubmit).on('submit', AddPluginPage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

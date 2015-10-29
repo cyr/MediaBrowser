@@ -20,7 +20,6 @@ namespace MediaBrowser.Controller.Entities.TV
         public List<Guid> SpecialFeatureIds { get; set; }
 
         public string OriginalTitle { get; set; }
-        public int SeasonCount { get; set; }
 
         public int? AnimeSeriesIndex { get; set; }
 
@@ -91,19 +90,6 @@ namespace MediaBrowser.Controller.Entities.TV
                         .Select(i => i.DateCreated)
                         .OrderByDescending(i => i)
                         .FirstOrDefault();
-            }
-        }
-
-        /// <summary>
-        /// Series aren't included directly in indices - Their Episodes will roll up to them
-        /// </summary>
-        /// <value><c>true</c> if [include in index]; otherwise, <c>false</c>.</value>
-        [IgnoreDataMember]
-        public override bool IncludeInIndex
-        {
-            get
-            {
-                return false;
             }
         }
 

@@ -29,6 +29,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using MediaBrowser.Controller.Net;
 
 namespace MediaBrowser.Server.Implementations.Session
 {
@@ -161,6 +162,7 @@ namespace MediaBrowser.Server.Implementations.Session
 
                 if (capabilities != null)
                 {
+                    info.AppIconUrl = capabilities.IconUrl;
                     ReportCapabilities(info, capabilities, false);
                 }
             }
@@ -366,6 +368,7 @@ namespace MediaBrowser.Server.Implementations.Session
             session.PlayState.AudioStreamIndex = info.AudioStreamIndex;
             session.PlayState.SubtitleStreamIndex = info.SubtitleStreamIndex;
             session.PlayState.PlayMethod = info.PlayMethod;
+            session.PlayState.RepeatMode = info.RepeatMode;
         }
 
         /// <summary>
@@ -967,7 +970,13 @@ namespace MediaBrowser.Server.Implementations.Session
 
         private IEnumerable<BaseItem> TranslateItemForPlayback(string id, User user)
         {
-            var item = _libraryManager.GetItemById(new Guid(id));
+            var item = _libraryManager.GetItemById(id);
+
+            if (item == null)
+            {
+                _logger.Error("A non-existant item Id {0} was passed into TranslateItemForPlayback", id);
+                return new List<BaseItem>();
+            }
 
             var byName = item as IItemByName;
 
@@ -1010,6 +1019,12 @@ namespace MediaBrowser.Server.Implementations.Session
         private IEnumerable<BaseItem> TranslateItemForInstantMix(string id, User user)
         {
             var item = _libraryManager.GetItemById(id);
+
+            if (item == null)
+            {
+                _logger.Error("A non-existant item Id {0} was passed into TranslateItemForInstantMix", id);
+                return new List<BaseItem>();
+            }
 
             return _musicManager.GetInstantMixFromItem(item, user);
         }
@@ -1203,22 +1218,22 @@ namespace MediaBrowser.Server.Implementations.Session
         /// <param name="userId">The user identifier.</param>
         /// <exception cref="System.UnauthorizedAccessException">Cannot modify additional users without authenticating first.</exception>
         /// <exception cref="System.ArgumentException">The requested user is already the primary user of the session.</exception>
-        public void AddAdditionalUser(string sessionId, Guid userId)
+        public void AddAdditionalUser(string sessionId, string userId)
         {
             var session = GetSession(sessionId);
 
-            if (session.UserId.HasValue && session.UserId.Value == userId)
+            if (session.UserId.HasValue && session.UserId.Value == new Guid(userId))
             {
                 throw new ArgumentException("The requested user is already the primary user of the session.");
             }
 
-            if (session.AdditionalUsers.All(i => new Guid(i.UserId) != userId))
+            if (session.AdditionalUsers.All(i => new Guid(i.UserId) != new Guid(userId)))
             {
                 var user = _userManager.GetUserById(userId);
 
                 session.AdditionalUsers.Add(new SessionUserInfo
                 {
-                    UserId = userId.ToString("N"),
+                    UserId = userId,
                     UserName = user.Name
                 });
             }
@@ -1231,16 +1246,16 @@ namespace MediaBrowser.Server.Implementations.Session
         /// <param name="userId">The user identifier.</param>
         /// <exception cref="System.UnauthorizedAccessException">Cannot modify additional users without authenticating first.</exception>
         /// <exception cref="System.ArgumentException">The requested user is already the primary user of the session.</exception>
-        public void RemoveAdditionalUser(string sessionId, Guid userId)
+        public void RemoveAdditionalUser(string sessionId, string userId)
         {
             var session = GetSession(sessionId);
 
-            if (session.UserId.HasValue && session.UserId.Value == userId)
+            if (session.UserId.HasValue && session.UserId.Value == new Guid(userId))
             {
                 throw new ArgumentException("The requested user is already the primary user of the session.");
             }
 
-            var user = session.AdditionalUsers.FirstOrDefault(i => new Guid(i.UserId) == userId);
+            var user = session.AdditionalUsers.FirstOrDefault(i => new Guid(i.UserId) == new Guid(userId));
 
             if (user != null)
             {
@@ -1262,7 +1277,7 @@ namespace MediaBrowser.Server.Implementations.Session
             {
                 if (!_deviceManager.CanAccessDevice(user.Id.ToString("N"), request.DeviceId))
                 {
-                    throw new UnauthorizedAccessException("User is not allowed access from this device.");
+                    throw new SecurityException("User is not allowed access from this device.");
                 }
             }
 
@@ -1272,7 +1287,7 @@ namespace MediaBrowser.Server.Implementations.Session
             {
                 EventHelper.FireEventIfNotNull(AuthenticationFailed, this, new GenericEventArgs<AuthenticationRequest>(request), _logger);
 
-                throw new UnauthorizedAccessException("Invalid user or password entered.");
+                throw new SecurityException("Invalid user or password entered.");
             }
 
             var token = await GetAuthorizationToken(user.Id.ToString("N"), request.DeviceId, request.App, request.AppVersion, request.DeviceName).ConfigureAwait(false);
@@ -1308,8 +1323,9 @@ namespace MediaBrowser.Server.Implementations.Session
 
             if (existing.Items.Length > 0)
             {
-                _logger.Debug("Reissuing access token");
-                return existing.Items[0].AccessToken;
+                var token = existing.Items[0].AccessToken;
+                _logger.Info("Reissuing access token: " + token);
+                return token;
             }
 
             var newToken = new AuthenticationInfo
@@ -1324,7 +1340,7 @@ namespace MediaBrowser.Server.Implementations.Session
                 AccessToken = Guid.NewGuid().ToString("N")
             };
 
-            _logger.Debug("Creating new access token for user {0}", userId);
+            _logger.Info("Creating new access token for user {0}", userId);
             await _authRepo.Create(newToken, CancellationToken.None).ConfigureAwait(false);
 
             return newToken.AccessToken;
@@ -1336,6 +1352,8 @@ namespace MediaBrowser.Server.Implementations.Session
             {
                 throw new ArgumentNullException("accessToken");
             }
+
+            _logger.Info("Logging out access token {0}", accessToken);
 
             var existing = _authRepo.Get(new AuthenticationInfoQuery
             {
@@ -1463,6 +1481,7 @@ namespace MediaBrowser.Server.Implementations.Session
                 NowPlayingItem = session.NowPlayingItem,
                 SupportsRemoteControl = session.SupportsMediaControl,
                 PlayState = session.PlayState,
+                AppIconUrl = session.AppIconUrl,
                 TranscodingInfo = session.NowPlayingItem == null ? null : session.TranscodingInfo
             };
 
@@ -1528,16 +1547,16 @@ namespace MediaBrowser.Server.Implementations.Session
             }
 
             var recording = item as ILiveTvRecording;
-            if (recording != null && recording.RecordingInfo != null)
+            if (recording != null)
             {
-                if (recording.RecordingInfo.IsSeries)
+                if (recording.IsSeries)
                 {
-                    info.Name = recording.RecordingInfo.EpisodeTitle;
-                    info.SeriesName = recording.RecordingInfo.Name;
+                    info.Name = recording.EpisodeTitle;
+                    info.SeriesName = recording.Name;
 
                     if (string.IsNullOrWhiteSpace(info.Name))
                     {
-                        info.Name = recording.RecordingInfo.Name;
+                        info.Name = recording.Name;
                     }
                 }
             }
@@ -1550,7 +1569,7 @@ namespace MediaBrowser.Server.Implementations.Session
 
                 if (info.PrimaryImageTag == null)
                 {
-                    var album = audio.Parents.OfType<MusicAlbum>().FirstOrDefault();
+                    var album = audio.AlbumEntity;
 
                     if (album != null && album.HasImage(ImageType.Primary))
                     {

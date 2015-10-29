@@ -1,34 +1,56 @@
 ﻿var LoginPage = {
 
+    getApiClient: function () {
+
+        var serverId = getParameterByName('serverid');
+        var deferred = DeferredBuilder.Deferred();
+
+        if (serverId) {
+            deferred.resolveWith(null, [ConnectionManager.getOrCreateApiClient(serverId)]);
+
+        } else {
+            deferred.resolveWith(null, [ApiClient]);
+        }
+
+        return deferred.promise();
+    },
+
     onPageShow: function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        // Show all users on localhost
-        var promise1 = ApiClient.getPublicUsers();
+        LoginPage.getApiClient().done(function (apiClient) {
 
-        promise1.done(function (users) {
+            apiClient.getPublicUsers().done(function (users) {
 
-            var showManualForm = !users.length;
+                var showManualForm = !users.length;
 
-            if (showManualForm) {
+                if (showManualForm) {
 
-                LoginPage.showManualForm(page, false, false);
+                    LoginPage.showManualForm(page, false, false);
 
-            } else {
-                LoginPage.showVisualForm(page);
-                LoginPage.loadUserList(users);
-            }
+                } else {
 
-            Dashboard.hideLoadingMsg();
+                    LoginPage.showVisualForm(page);
+                    LoginPage.loadUserList(page, apiClient, users);
+                }
+
+                Dashboard.hideLoadingMsg();
+            });
+
+            apiClient.getJSON(apiClient.getUrl('Branding/Configuration')).done(function (options) {
+
+                $('.disclaimer', page).html(options.LoginDisclaimer || '');
+            });
         });
 
-        ApiClient.getJSON(ApiClient.getUrl('Branding/Configuration')).done(function (options) {
-
-            $('.disclaimer', page).html(options.LoginDisclaimer || '');
-        });
+        if (Dashboard.isConnectMode()) {
+            $('.connectButtons', page).show();
+        } else {
+            $('.connectButtons', page).hide();
+        }
     },
 
     cancelLogin: function () {
@@ -38,12 +60,12 @@
 
     showManualForm: function (page, showCancel, focusPassword) {
         $('.visualLoginForm', page).hide();
-        $('#manualLoginForm', page).show();
+        $('.manualLoginForm', page).show();
 
         if (focusPassword) {
-            $('#txtManualPassword', page).focus();
+            $('#txtManualPassword input', page).focus();
         } else {
-            $('#txtManualName', page).focus();
+            $('#txtManualName input', page).focus();
         }
 
         if (showCancel) {
@@ -55,7 +77,7 @@
 
     showVisualForm: function (page) {
         $('.visualLoginForm', page).show();
-        $('#manualLoginForm', page).hide();
+        $('.manualLoginForm', page).hide();
     },
 
     getLastSeenText: function (lastActivityDate) {
@@ -67,40 +89,34 @@
         return "Last seen " + humane_date(lastActivityDate);
     },
 
-    getImagePath: function (user) {
-
-        if (!user.PrimaryImageTag) {
-            return "css/images/logindefault.png";
-        }
-
-        return ApiClient.getUserImageUrl(user.Id, {
-            width: 240,
-            tag: user.PrimaryImageTag,
-            type: "Primary"
-        });
-    },
-
-    authenticateUserByName: function (username, password) {
+    authenticateUserByName: function (page, apiClient, username, password) {
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.authenticateUserByName(username, password).done(function (result) {
+        apiClient.authenticateUserByName(username, password).done(function (result) {
 
             var user = result.User;
 
-            Dashboard.setCurrentUser(user.Id, result.AccessToken);
+            var serverId = getParameterByName('serverid');
 
-            if (user.Policy.IsAdministrator) {
-                window.location = "dashboard.html?u=" + user.Id + '&t=' + result.AccessToken;
+            var newUrl;
+
+            if (user.Policy.IsAdministrator && !serverId) {
+                newUrl = "dashboard.html";
             } else {
-                window.location = "index.html?u=" + user.Id + '&t=' + result.AccessToken;
+                newUrl = "index.html";
             }
+
+            Dashboard.hideLoadingMsg();
+
+            Dashboard.onServerChanged(user.Id, result.AccessToken, apiClient);
+            Dashboard.navigate(newUrl);
 
         }).fail(function () {
 
-            $('#pw', '#loginPage').val('');
-            $('#txtManualName', '#loginPage').val('');
-            $('#txtManualPassword', '#loginPage').val('');
+            $('#pw', page).val('');
+            $('#txtManualName', page).val('');
+            $('#txtManualPassword', page).val('');
 
             Dashboard.hideLoadingMsg();
 
@@ -111,15 +127,13 @@
 
     },
 
-    loadUserList: function (users) {
+    loadUserList: function (page, apiClient, users) {
         var html = "";
-
-        var page = $.mobile.activePage;
 
         for (var i = 0, length = users.length; i < length; i++) {
             var user = users[i];
 
-            html += '<div class="card squareCard alternateHover bottomPaddedCard"><div class="cardBox visualCardBox">';
+            html += '<div class="card squareCard bottomPaddedCard"><div class="cardBox visualCardBox">';
 
             html += '<div class="cardScalable">';
 
@@ -130,7 +144,7 @@
 
             if (user.PrimaryImageTag) {
 
-                imgUrl = ApiClient.getUserImageUrl(user.Id, {
+                imgUrl = apiClient.getUserImageUrl(user.Id, {
                     width: 300,
                     tag: user.PrimaryImageTag,
                     type: "Primary"
@@ -168,18 +182,22 @@
             html += '</div>';
         }
 
-        var elem = $('#divUsers', '#loginPage').html(html);
+        var elem = $('#divUsers', page).html(html);
 
         $('a', elem).on('click', function () {
 
+            var id = this.getAttribute('data-userid');
             var name = this.getAttribute('data-username');
             var haspw = this.getAttribute('data-haspw');
 
-            if (haspw == 'false') {
-                LoginPage.authenticateUserByName(name, '');
+            if (id == 'manual') {
+                LoginPage.showManualForm(page, true);
+            }
+            else if (haspw == 'false') {
+                LoginPage.authenticateUserByName(page, apiClient, name, '');
             } else {
                 $('#txtManualName', page).val(name);
-                $('#txtManualPassword', '#loginPage').val('');
+                $('#txtManualPassword', page).val('');
                 LoginPage.showManualForm(page, true, true);
             }
         });
@@ -187,11 +205,25 @@
 
     onManualSubmit: function () {
 
-        LoginPage.authenticateUserByName($('#txtManualName', '#loginPage').val(), $('#txtManualPassword', '#loginPage').val());
+    	var page = $(this).parents('.page');
+
+        LoginPage.getApiClient().done(function (apiClient) {
+            LoginPage.authenticateUserByName(page, apiClient, $('#txtManualName', page).val(), $('#txtManualPassword', page).val());
+        });
 
         // Disable default form submission
         return false;
     }
 };
 
-$(document).on('pageshow', "#loginPage", LoginPage.onPageShow);
+$(document).on('pageinit', "#loginPage", function () {
+
+    var page = this;
+
+    $('.manualLoginForm', page).off('submit', LoginPage.onManualSubmit).on('submit', LoginPage.onManualSubmit);
+
+    $('.btnForgotPassword', page).on('click', function () {
+        Dashboard.navigate('forgotpassword.html');
+    });
+
+}).on('pageshow', "#loginPage", LoginPage.onPageShow);

@@ -17,6 +17,7 @@
     }
 
     function populateVersions(packageInfo, page, installedPlugin) {
+
         var html = '';
 
         for (var i = 0, length = packageInfo.versions.length; i < length; i++) {
@@ -48,12 +49,10 @@
             })[0];
         }
 
-        selectmenu.selectmenu('refresh');
-
         if (packageVersion) {
             var val = packageVersion.versionStr + '|' + packageVersion.classification;
 
-            selectmenu.val(val).selectmenu('refresh');
+            selectmenu.val(val);
         }
     }
 
@@ -92,7 +91,7 @@
                 html += "</div>";
             }
 
-            $('#latestReviews', page).html(html).trigger('create');
+            Events.trigger($('#latestReviews', page).html(html)[0], 'create');
         });
     }
 
@@ -109,12 +108,12 @@
         $('.pluginName', page).html(pkg.name);
 
         if (pkg.targetSystem == 'Server') {
-            $("#btnInstallDiv", page).show();
+            $("#btnInstallDiv", page).visible(true);
             $("#nonServerMsg", page).hide();
-            $("#pSelectVersion", page).show();
+            $("#pSelectVersion", page).visible(true);
         } else {
-            $("#btnInstallDiv", page).hide();
-            $("#pSelectVersion", page).hide();
+            $("#btnInstallDiv", page).visible(false);
+            $("#pSelectVersion", page).visible(false);
 
             var msg = Globalize.translate('MessageInstallPluginFromApp');
             $("#nonServerMsg", page).html(msg).show();
@@ -131,84 +130,7 @@
 
         $('#developer', page).html(pkg.owner);
 
-        if (pkg.isPremium) {
-            $('.premiumPackage', page).show();
-
-            // Fill in registration info
-            var regStatus = "";
-            if (pkg.isRegistered) {
-
-                regStatus += "<p style='color:green;'>";
-
-                regStatus += Globalize.translate('MessageFeatureIncludedWithSupporter');
-
-            } else {
-
-                var expDateTime = new Date(pkg.expDate).getTime();
-                var nowTime = new Date().getTime();
-
-                if (expDateTime <= nowTime) {
-                    regStatus += "<p style='color:red;'>";
-                    regStatus += Globalize.translate('MessageTrialExpired');
-                }
-                else if (expDateTime > new Date(1970, 1, 1).getTime()) {
-
-                    regStatus += "<p style='color:blue;'>";
-                    regStatus += Globalize.translate('MessageTrialWillExpireIn').replace('{0}', Math.round(expDateTime - nowTime) / (86400000));
-                }
-            }
-
-            regStatus += "</p>";
-            $('#regStatus', page).html(regStatus);
-
-            if (pluginSecurityInfo.IsMBSupporter) {
-                $('#regInfo', page).html(pkg.regInfo || "");
-
-                $('.premiumDescription', page).hide();
-                $('.supporterDescription', page).hide();
-
-                if (pkg.price > 0) {
-                    // Fill in PayPal info
-                    $('.premiumHasPrice', page).show();
-                    $('#featureId', page).val(pkg.featureId);
-                    $('#featureName', page).val(pkg.name);
-                    $('#amount', page).val(pkg.price);
-
-                    $('#regPrice', page).html("<h3>" + Globalize.translate('ValuePriceUSD').replace('{0}', "$" + pkg.price.toFixed(2)) + "</h3>");
-
-                    var url = "http://mb3admin.com/admin/service/user/getPayPalEmail?id=" + pkg.owner;
-
-                    $.getJSON(url).done(function (dev) {
-                        if (dev.payPalEmail) {
-                            $('#payPalEmail', page).val(dev.payPalEmail);
-
-                        } else {
-                            $('#ppButton', page).hide();
-                        }
-                    });
-                } else {
-                    // Supporter-only feature
-                    $('.premiumHasPrice', page).hide();
-                }
-            } else {
-
-                if (pkg.price) {
-                    $('.premiumDescription', page).show();
-                    $('.supporterDescription', page).hide();
-                    $('#regInfo', page).html("");
-
-                } else {
-                    $('.premiumDescription', page).hide();
-                    $('.supporterDescription', page).show();
-                    $('#regInfo', page).html("");
-                }
-
-                $('#ppButton', page).hide();
-            }
-
-        } else {
-            $('.premiumPackage', page).hide();
-        }
+        RegistrationServices.renderPluginInfo(page, pkg, pluginSecurityInfo);
 
         //Ratings and Reviews
         var ratingHtml = RatingHelpers.getStoreRatingHtml(pkg.avgRating, pkg.id, pkg.name);
@@ -220,7 +142,7 @@
 
         if (pkg.richDescUrl) {
             $('#pViewWebsite', page).show();
-            $('#pViewWebsite a', page)[0].href = pkg.richDescUrl;
+            $('#pViewWebsite a', page).attr('href', pkg.richDescUrl);
         } else {
             $('#pViewWebsite', page).hide();
         }
@@ -246,7 +168,11 @@
         Dashboard.hideLoadingMsg();
     }
 
-    $(document).on('pageshow', "#addPluginPage", function () {
+    $(document).on('pageinit', "#addPluginPage", function () {
+
+        $('.addPluginForm').off('submit', AddPluginPage.onSubmit).on('submit', AddPluginPage.onSubmit);
+
+    }).on('pageshow', "#addPluginPage", function () {
 
         var page = this;
 
@@ -264,7 +190,6 @@
             renderPackage(response1[0], response2[0], response3[0], page);
 
         });
-
 
     }).on('pagebeforeshow pageinit pageshow', "#addPluginPage", function () {
 

@@ -40,8 +40,9 @@ namespace MediaBrowser.Dlna.Didl
         private readonly ILocalizationManager _localization;
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly ILogger _logger;
+        private readonly ILibraryManager _libraryManager;
 
-        public DidlBuilder(DeviceProfile profile, User user, IImageProcessor imageProcessor, string serverAddress, string accessToken, IUserDataManager userDataManager, ILocalizationManager localization, IMediaSourceManager mediaSourceManager, ILogger logger)
+        public DidlBuilder(DeviceProfile profile, User user, IImageProcessor imageProcessor, string serverAddress, string accessToken, IUserDataManager userDataManager, ILocalizationManager localization, IMediaSourceManager mediaSourceManager, ILogger logger, ILibraryManager libraryManager)
         {
             _profile = profile;
             _imageProcessor = imageProcessor;
@@ -50,6 +51,7 @@ namespace MediaBrowser.Dlna.Didl
             _localization = localization;
             _mediaSourceManager = mediaSourceManager;
             _logger = logger;
+            _libraryManager = libraryManager;
             _accessToken = accessToken;
             _user = user;
         }
@@ -118,7 +120,7 @@ namespace MediaBrowser.Dlna.Didl
                 }
             }
 
-            AddCover(item, null, element);
+            AddCover(item, context, null, element);
 
             return element;
         }
@@ -149,8 +151,6 @@ namespace MediaBrowser.Dlna.Didl
                 targetHeight,
                 streamInfo.TargetVideoBitDepth,
                 streamInfo.TargetVideoBitrate,
-                streamInfo.TargetAudioChannels,
-                streamInfo.TargetAudioBitrate,
                 streamInfo.TargetTimestamp,
                 streamInfo.IsDirectStream,
                 streamInfo.RunTimeTicks,
@@ -163,7 +163,8 @@ namespace MediaBrowser.Dlna.Didl
                 streamInfo.IsTargetCabac,
                 streamInfo.TargetRefFrames,
                 streamInfo.TargetVideoStreamCount,
-                streamInfo.TargetAudioStreamCount);
+                streamInfo.TargetAudioStreamCount,
+                streamInfo.TargetVideoCodecTag);
 
             foreach (var contentFeature in contentFeatureList)
             {
@@ -193,6 +194,9 @@ namespace MediaBrowser.Dlna.Didl
 
             if (string.Equals(subtitleMode, "CaptionInfoEx", StringComparison.OrdinalIgnoreCase))
             {
+                // <sec:CaptionInfoEx sec:type="srt">http://192.168.1.3:9999/video.srt</sec:CaptionInfoEx>
+                // <sec:CaptionInfo sec:type="srt">http://192.168.1.3:9999/video.srt</sec:CaptionInfo>
+
                 //var res = container.OwnerDocument.CreateElement("SEC", "CaptionInfoEx");
 
                 //res.InnerText = info.Url;
@@ -200,6 +204,16 @@ namespace MediaBrowser.Dlna.Didl
                 //// TODO: attribute needs SEC:
                 //res.SetAttribute("type", info.Format.ToLower());
                 //container.AppendChild(res);
+            }
+            else if (string.Equals(subtitleMode, "smi", StringComparison.OrdinalIgnoreCase))
+            {
+                var res = container.OwnerDocument.CreateElement(string.Empty, "res", NS_DIDL);
+
+                res.InnerText = info.Url;
+
+                res.SetAttribute("protocolInfo", "http-get:*:smi/caption:*");
+
+                container.AppendChild(res);
             }
             else
             {
@@ -276,11 +290,9 @@ namespace MediaBrowser.Dlna.Didl
                 streamInfo.AudioCodec,
                 streamInfo.VideoCodec,
                 streamInfo.TargetAudioBitrate,
-                targetChannels,
                 targetWidth,
                 targetHeight,
                 streamInfo.TargetVideoBitDepth,
-                streamInfo.TargetVideoBitrate,
                 streamInfo.TargetVideoProfile,
                 streamInfo.TargetVideoLevel,
                 streamInfo.TargetFramerate,
@@ -290,7 +302,8 @@ namespace MediaBrowser.Dlna.Didl
                 streamInfo.IsTargetCabac,
                 streamInfo.TargetRefFrames,
                 streamInfo.TargetVideoStreamCount,
-                streamInfo.TargetAudioStreamCount);
+                streamInfo.TargetAudioStreamCount,
+                streamInfo.TargetVideoCodecTag);
 
             var filename = url.Substring(0, url.IndexOf('?'));
 
@@ -483,7 +496,7 @@ namespace MediaBrowser.Dlna.Didl
 
             AddCommonFields(folder, stubType, null, container, filter);
 
-            AddCover(folder, stubType, container);
+            AddCover(folder, context, stubType, container);
 
             return container;
         }
@@ -658,7 +671,9 @@ namespace MediaBrowser.Dlna.Didl
         {
             var types = new[] { PersonType.Director, PersonType.Writer, PersonType.Producer, PersonType.Composer, "Creator" };
 
-            foreach (var actor in item.People)
+            var people = _libraryManager.GetPeople(item);
+
+            foreach (var actor in people)
             {
                 var type = types.FirstOrDefault(i => string.Equals(i, actor.Type, StringComparison.OrdinalIgnoreCase) || string.Equals(i, actor.Role, StringComparison.OrdinalIgnoreCase))
                     ?? PersonType.Actor;
@@ -764,7 +779,7 @@ namespace MediaBrowser.Dlna.Didl
             }
         }
 
-        private void AddCover(BaseItem item, StubType? stubType, XmlElement element)
+        private void AddCover(BaseItem item, BaseItem context, StubType? stubType, XmlElement element)
         {
             if (stubType.HasValue && stubType.Value == StubType.People)
             {
@@ -772,7 +787,26 @@ namespace MediaBrowser.Dlna.Didl
                 return;
             }
 
-            var imageInfo = GetImageInfo(item);
+            ImageDownloadInfo imageInfo = null;
+
+            if (context is UserView)
+            {
+                var episode = item as Episode;
+                if (episode != null)
+                {
+                    var parent = (BaseItem)episode.Series ?? episode.Season;
+                    if (parent != null)
+                    {
+                        imageInfo = GetImageInfo(parent);
+                    }
+                }
+            }
+
+            // Finally, just use the image from the item
+            if (imageInfo == null)
+            {
+                imageInfo = GetImageInfo(item);
+            }
 
             if (imageInfo == null)
             {
@@ -850,7 +884,7 @@ namespace MediaBrowser.Dlna.Didl
         private void AddEmbeddedImageAsCover(string name, XmlElement element)
         {
             var result = element.OwnerDocument;
-            
+
             var icon = result.CreateElement("upnp", "albumArtURI", NS_UPNP);
             var profile = result.CreateAttribute("dlna", "profileID", NS_DLNA);
             profile.InnerText = _profile.AlbumArtPn;
@@ -925,14 +959,11 @@ namespace MediaBrowser.Dlna.Didl
                 }
             }
 
-            if (item is Audio || item is Episode)
-            {
-                item = item.Parents.FirstOrDefault(i => i.HasImage(ImageType.Primary));
+            item = item.Parents.FirstOrDefault(i => i.HasImage(ImageType.Primary));
 
-                if (item != null)
-                {
-                    return GetImageInfo(item, ImageType.Primary);
-                }
+            if (item != null)
+            {
+                return GetImageInfo(item, ImageType.Primary);
             }
 
             return null;
@@ -955,17 +986,21 @@ namespace MediaBrowser.Dlna.Didl
             int? width = null;
             int? height = null;
 
-            try
-            {
-                var size = _imageProcessor.GetImageSize(imageInfo);
+            //try
+            //{
+            //    var size = _imageProcessor.GetImageSize(imageInfo);
 
-                width = Convert.ToInt32(size.Width);
-                height = Convert.ToInt32(size.Height);
-            }
-            catch
-            {
+            //    width = Convert.ToInt32(size.Width);
+            //    height = Convert.ToInt32(size.Height);
+            //}
+            //catch
+            //{
 
-            }
+            //}
+
+            var inputFormat = (Path.GetExtension(imageInfo.Path) ?? string.Empty)
+                .TrimStart('.')
+                .Replace("jpeg", "jpg", StringComparison.OrdinalIgnoreCase);
 
             return new ImageDownloadInfo
             {
@@ -974,7 +1009,7 @@ namespace MediaBrowser.Dlna.Didl
                 ImageTag = tag,
                 Width = width,
                 Height = height,
-                File = imageInfo.Path,
+                Format = inputFormat,
                 ItemImageInfo = imageInfo
             };
         }
@@ -990,7 +1025,7 @@ namespace MediaBrowser.Dlna.Didl
 
             internal bool IsDirectStream;
 
-            internal string File;
+            internal string Format;
 
             internal ItemImageInfo ItemImageInfo;
         }
@@ -1053,14 +1088,10 @@ namespace MediaBrowser.Dlna.Didl
                 width = Convert.ToInt32(newSize.Width);
                 height = Convert.ToInt32(newSize.Height);
 
-                var inputFormat = (Path.GetExtension(info.File) ?? string.Empty)
-                    .TrimStart('.')
-                    .Replace("jpeg", "jpg", StringComparison.OrdinalIgnoreCase);
-
                 var normalizedFormat = format
                     .Replace("jpeg", "jpg", StringComparison.OrdinalIgnoreCase);
 
-                if (string.Equals(inputFormat, normalizedFormat, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(info.Format, normalizedFormat, StringComparison.OrdinalIgnoreCase))
                 {
                     info.IsDirectStream = maxWidth >= width.Value && maxHeight >= height.Value;
                 }

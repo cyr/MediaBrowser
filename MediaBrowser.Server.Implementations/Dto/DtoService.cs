@@ -26,6 +26,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Dto
 {
@@ -46,8 +47,9 @@ namespace MediaBrowser.Server.Implementations.Dto
         private readonly IApplicationHost _appHost;
         private readonly Func<IDeviceManager> _deviceManager;
         private readonly Func<IMediaSourceManager> _mediaSourceManager;
+        private readonly Func<ILiveTvManager> _livetvManager;
 
-        public DtoService(ILogger logger, ILibraryManager libraryManager, IUserDataManager userDataRepository, IItemRepository itemRepo, IImageProcessor imageProcessor, IServerConfigurationManager config, IFileSystem fileSystem, IProviderManager providerManager, Func<IChannelManager> channelManagerFactory, ISyncManager syncManager, IApplicationHost appHost, Func<IDeviceManager> deviceManager, Func<IMediaSourceManager> mediaSourceManager)
+        public DtoService(ILogger logger, ILibraryManager libraryManager, IUserDataManager userDataRepository, IItemRepository itemRepo, IImageProcessor imageProcessor, IServerConfigurationManager config, IFileSystem fileSystem, IProviderManager providerManager, Func<IChannelManager> channelManagerFactory, ISyncManager syncManager, IApplicationHost appHost, Func<IDeviceManager> deviceManager, Func<IMediaSourceManager> mediaSourceManager, Func<ILiveTvManager> livetvManager)
         {
             _logger = logger;
             _libraryManager = libraryManager;
@@ -62,6 +64,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             _appHost = appHost;
             _deviceManager = deviceManager;
             _mediaSourceManager = mediaSourceManager;
+            _livetvManager = livetvManager;
         }
 
         /// <summary>
@@ -85,17 +88,18 @@ namespace MediaBrowser.Server.Implementations.Dto
 
         public IEnumerable<BaseItemDto> GetBaseItemDtos(IEnumerable<BaseItem> items, DtoOptions options, User user = null, BaseItem owner = null)
         {
-            var tuple = GetItemIdsWithSyncJobs(options);
+            var syncJobItems = GetSyncedItemProgress(options);
+            var syncDictionary = GetSyncedItemProgressDictionary(syncJobItems);
 
             var list = new List<BaseItemDto>();
 
             foreach (var item in items)
             {
-                var dto = GetBaseItemDtoInternal(item, options, user, owner);
+                var dto = GetBaseItemDtoInternal(item, options, syncDictionary, user, owner);
 
                 var byName = item as IItemByName;
 
-                if (byName != null && !(item is LiveTvChannel))
+                if (byName != null)
                 {
                     if (options.Fields.Contains(ItemFields.ItemCounts))
                     {
@@ -109,7 +113,7 @@ namespace MediaBrowser.Server.Implementations.Dto
                     }
                 }
 
-                FillSyncInfo(dto, item, tuple.Item1, tuple.Item2, options, user);
+                FillSyncInfo(dto, item, syncJobItems, options, user);
 
                 list.Add(dto);
             }
@@ -117,54 +121,89 @@ namespace MediaBrowser.Server.Implementations.Dto
             return list;
         }
 
+        private Dictionary<string, SyncedItemProgress> GetSyncedItemProgressDictionary(IEnumerable<SyncedItemProgress> items)
+        {
+            var dict = new Dictionary<string, SyncedItemProgress>();
+
+            foreach (var item in items)
+            {
+                dict[item.ItemId] = item;
+            }
+
+            return dict;
+        }
+
         public BaseItemDto GetBaseItemDto(BaseItem item, DtoOptions options, User user = null, BaseItem owner = null)
         {
-            var dto = GetBaseItemDtoInternal(item, options, user, owner);
+            var syncProgress = GetSyncedItemProgress(options);
+
+            var dto = GetBaseItemDtoInternal(item, options, GetSyncedItemProgressDictionary(syncProgress), user, owner);
 
             var byName = item as IItemByName;
 
-            if (byName != null && !(item is LiveTvChannel))
+            if (byName != null)
             {
                 if (options.Fields.Contains(ItemFields.ItemCounts))
                 {
-                    var itemFilter = byName.GetItemFilter();
-
-                    var libraryItems = user != null ?
-                       user.RootFolder.GetRecursiveChildren(user, itemFilter) :
-                       _libraryManager.RootFolder.GetRecursiveChildren(itemFilter);
-
-                    SetItemByNameInfo(item, dto, libraryItems.ToList(), user);
+                    SetItemByNameInfo(item, dto, GetTaggedItems(byName, user), user);
                 }
 
-                FillSyncInfo(dto, item, options, user);
+                FillSyncInfo(dto, item, options, user, syncProgress);
                 return dto;
             }
 
-            FillSyncInfo(dto, item, options, user);
+            FillSyncInfo(dto, item, options, user, syncProgress);
 
             return dto;
         }
 
-        private Tuple<IEnumerable<string>, IEnumerable<string>> GetItemIdsWithSyncJobs(DtoOptions options)
+        private List<BaseItem> GetTaggedItems(IItemByName byName, User user)
+        {
+            var person = byName as Person;
+
+            if (person != null)
+            {
+                var items = _libraryManager.GetItems(new InternalItemsQuery
+                {
+                    Person = byName.Name
+
+                }).Items;
+
+                if (user != null)
+                {
+                    return items.Where(i => i.IsVisibleStandalone(user)).ToList();
+                }
+
+                return items.ToList();
+            }
+
+            var itemFilter = byName.GetItemFilter();
+
+            return user != null ?
+               user.RootFolder.GetRecursiveChildren(user, itemFilter).ToList() :
+               _libraryManager.RootFolder.GetRecursiveChildren(itemFilter).ToList();
+        }
+
+        private SyncedItemProgress[] GetSyncedItemProgress(DtoOptions options)
         {
             if (!options.Fields.Contains(ItemFields.SyncInfo))
             {
-                return new Tuple<IEnumerable<string>, IEnumerable<string>>(new List<string>(), new List<string>());
+                return new SyncedItemProgress[] { };
             }
 
             var deviceId = options.DeviceId;
             if (string.IsNullOrWhiteSpace(deviceId))
             {
-                return new Tuple<IEnumerable<string>, IEnumerable<string>>(new List<string>(), new List<string>());
+                return new SyncedItemProgress[] { };
             }
 
             var caps = _deviceManager().GetCapabilities(deviceId);
             if (caps == null || !caps.SupportsSync)
             {
-                return new Tuple<IEnumerable<string>, IEnumerable<string>>(new List<string>(), new List<string>());
+                return new SyncedItemProgress[] { };
             }
 
-            var result1 = _syncManager.GetLibraryItemIds(new SyncJobItemQuery
+            return _syncManager.GetSyncedItemProgresses(new SyncJobItemQuery
             {
                 TargetId = deviceId,
                 Statuses = new[]
@@ -172,38 +211,28 @@ namespace MediaBrowser.Server.Implementations.Dto
                     SyncJobItemStatus.Converting,
                     SyncJobItemStatus.Queued,
                     SyncJobItemStatus.Transferring,
-                    SyncJobItemStatus.ReadyToTransfer
-                }
-            });
-
-            var result2 = _syncManager.GetLibraryItemIds(new SyncJobItemQuery
-            {
-                TargetId = deviceId,
-                Statuses = new[]
-                {
+                    SyncJobItemStatus.ReadyToTransfer,
                     SyncJobItemStatus.Synced
                 }
-            });
-
-            return new Tuple<IEnumerable<string>, IEnumerable<string>>(result1.Items, result2.Items);
+            }).Items;
         }
 
         public void FillSyncInfo(IEnumerable<IHasSyncInfo> dtos, DtoOptions options, User user)
         {
             if (options.Fields.Contains(ItemFields.SyncInfo))
             {
-                var tuple = GetItemIdsWithSyncJobs(options);
+                var syncProgress = GetSyncedItemProgress(options);
 
                 foreach (var dto in dtos)
                 {
                     var item = _libraryManager.GetItemById(dto.Id);
 
-                    FillSyncInfo(dto, item, tuple.Item1, tuple.Item2, options, user);
+                    FillSyncInfo(dto, item, syncProgress, options, user);
                 }
             }
         }
 
-        private void FillSyncInfo(IHasSyncInfo dto, BaseItem item, DtoOptions options, User user)
+        private void FillSyncInfo(IHasSyncInfo dto, BaseItem item, DtoOptions options, User user, SyncedItemProgress[] syncProgress)
         {
             if (options.Fields.Contains(ItemFields.SyncInfo))
             {
@@ -213,10 +242,8 @@ namespace MediaBrowser.Server.Implementations.Dto
 
             if (dto.SupportsSync ?? false)
             {
-                var tuple = GetItemIdsWithSyncJobs(options);
-
-                dto.HasSyncJob = tuple.Item1.Contains(dto.Id, StringComparer.OrdinalIgnoreCase);
-                dto.IsSynced = tuple.Item2.Contains(dto.Id, StringComparer.OrdinalIgnoreCase);
+                dto.HasSyncJob = syncProgress.Any(i => i.Status != SyncJobItemStatus.Synced && string.Equals(i.ItemId, dto.Id, StringComparison.OrdinalIgnoreCase));
+                dto.IsSynced = syncProgress.Any(i => i.Status == SyncJobItemStatus.Synced && string.Equals(i.ItemId, dto.Id, StringComparison.OrdinalIgnoreCase));
 
                 if (dto.IsSynced.Value)
                 {
@@ -230,7 +257,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             }
         }
 
-        private void FillSyncInfo(IHasSyncInfo dto, BaseItem item, IEnumerable<string> itemIdsWithPendingSyncJobs, IEnumerable<string> syncedItemIds, DtoOptions options, User user)
+        private void FillSyncInfo(IHasSyncInfo dto, BaseItem item, SyncedItemProgress[] syncProgress, DtoOptions options, User user)
         {
             if (options.Fields.Contains(ItemFields.SyncInfo))
             {
@@ -240,8 +267,8 @@ namespace MediaBrowser.Server.Implementations.Dto
 
             if (dto.SupportsSync ?? false)
             {
-                dto.HasSyncJob = itemIdsWithPendingSyncJobs.Contains(dto.Id, StringComparer.OrdinalIgnoreCase);
-                dto.IsSynced = syncedItemIds.Contains(dto.Id, StringComparer.OrdinalIgnoreCase);
+                dto.HasSyncJob = syncProgress.Any(i => i.Status != SyncJobItemStatus.Synced && string.Equals(i.ItemId, dto.Id, StringComparison.OrdinalIgnoreCase));
+                dto.IsSynced = syncProgress.Any(i => i.Status == SyncJobItemStatus.Synced && string.Equals(i.ItemId, dto.Id, StringComparison.OrdinalIgnoreCase));
 
                 if (dto.IsSynced.Value)
                 {
@@ -255,7 +282,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             }
         }
 
-        private BaseItemDto GetBaseItemDtoInternal(BaseItem item, DtoOptions options, User user = null, BaseItem owner = null)
+        private BaseItemDto GetBaseItemDtoInternal(BaseItem item, DtoOptions options, Dictionary<string, SyncedItemProgress> syncProgress, User user = null, BaseItem owner = null)
         {
             var fields = options.Fields;
 
@@ -299,7 +326,7 @@ namespace MediaBrowser.Server.Implementations.Dto
 
             if (user != null)
             {
-                AttachUserSpecificInfo(dto, item, user, fields);
+                AttachUserSpecificInfo(dto, item, user, fields, syncProgress);
             }
 
             var hasMediaSources = item as IHasMediaSources;
@@ -324,6 +351,20 @@ namespace MediaBrowser.Server.Implementations.Dto
             }
 
             AttachBasicFields(dto, item, owner, options);
+
+            var tvChannel = item as LiveTvChannel;
+            if (tvChannel != null)
+            {
+                _livetvManager().AddChannelInfo(dto, tvChannel, options, user);
+            }
+
+            var collectionFolder = item as ICollectionFolder;
+            if (collectionFolder != null)
+            {
+                dto.CollectionType = user == null ?
+                    collectionFolder.CollectionType :
+                    collectionFolder.GetViewType(user);
+            }
 
             var playlist = item as Playlist;
             if (playlist != null)
@@ -350,20 +391,31 @@ namespace MediaBrowser.Server.Implementations.Dto
                 dto.Etag = item.GetEtag(user);
             }
 
+            if (item is ILiveTvRecording)
+            {
+                _livetvManager().AddInfoToRecordingDto(item, dto, user);
+            }
+
+            else if (item is LiveTvProgram)
+            {
+                _livetvManager().AddInfoToProgramDto(item, dto, fields.Contains(ItemFields.ChannelInfo), user);
+            }
+
             return dto;
         }
 
-        public BaseItemDto GetItemByNameDto<T>(T item, DtoOptions options, List<BaseItem> taggedItems, User user = null)
-            where T : BaseItem, IItemByName
+        public BaseItemDto GetItemByNameDto(BaseItem item, DtoOptions options, List<BaseItem> taggedItems, User user = null)
         {
-            var dto = GetBaseItemDtoInternal(item, options, user);
+            var syncProgress = GetSyncedItemProgress(options);
+
+            var dto = GetBaseItemDtoInternal(item, options, GetSyncedItemProgressDictionary(syncProgress), user);
 
             if (options.Fields.Contains(ItemFields.ItemCounts))
             {
                 SetItemByNameInfo(item, dto, taggedItems, user);
             }
 
-            FillSyncInfo(dto, item, options, user);
+            FillSyncInfo(dto, item, options, user, syncProgress);
 
             return dto;
         }
@@ -403,7 +455,8 @@ namespace MediaBrowser.Server.Implementations.Dto
         /// <param name="item">The item.</param>
         /// <param name="user">The user.</param>
         /// <param name="fields">The fields.</param>
-        private void AttachUserSpecificInfo(BaseItemDto dto, BaseItem item, User user, List<ItemFields> fields)
+        /// <param name="syncProgress">The synchronize progress.</param>
+        private void AttachUserSpecificInfo(BaseItemDto dto, BaseItem item, User user, List<ItemFields> fields, Dictionary<string, SyncedItemProgress> syncProgress)
         {
             if (item.IsFolder)
             {
@@ -421,7 +474,7 @@ namespace MediaBrowser.Server.Implementations.Dto
                 // TODO: Disable for CollectionFolder
                 if (!(folder is UserRootFolder) && !(folder is UserView))
                 {
-                    SetSpecialCounts(folder, user, dto, fields);
+                    SetSpecialCounts(folder, user, dto, fields, syncProgress);
                 }
 
                 dto.UserData.Played = dto.UserData.PlayedPercentage.HasValue && dto.UserData.PlayedPercentage.Value >= 100;
@@ -630,7 +683,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             // Ordering by person type to ensure actors and artists are at the front.
             // This is taking advantage of the fact that they both begin with A
             // This should be improved in the future
-            var people = item.People.OrderBy(i => i.SortOrder ?? int.MaxValue)
+            var people = _libraryManager.GetPeople(item).OrderBy(i => i.SortOrder ?? int.MaxValue)
                 .ThenBy(i =>
                 {
                     if (i.IsType(PersonType.Actor))
@@ -678,7 +731,7 @@ namespace MediaBrowser.Server.Implementations.Dto
                     }
 
                 }).Where(i => i != null)
-                .DistinctBy(i => i.Name)
+                .DistinctBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < people.Count; i++)
@@ -730,6 +783,7 @@ namespace MediaBrowser.Server.Implementations.Dto
                 }
             })
             .Where(i => i != null)
+            .DistinctBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < studios.Count; i++)
@@ -853,12 +907,6 @@ namespace MediaBrowser.Server.Implementations.Dto
             if (fields.Contains(ItemFields.DisplayMediaType))
             {
                 dto.DisplayMediaType = item.DisplayMediaType;
-            }
-
-            // Leave null if false
-            if (item.IsUnidentified)
-            {
-                dto.IsUnidentified = item.IsUnidentified;
             }
 
             if (fields.Contains(ItemFields.Settings))
@@ -994,14 +1042,10 @@ namespace MediaBrowser.Server.Implementations.Dto
             dto.IsFolder = item.IsFolder;
             dto.MediaType = item.MediaType;
             dto.LocationType = item.LocationType;
+            dto.IsHD = item.IsHD;
 
-            var hasLang = item as IHasPreferredMetadataLanguage;
-
-            if (hasLang != null)
-            {
-                dto.PreferredMetadataCountryCode = hasLang.PreferredMetadataCountryCode;
-                dto.PreferredMetadataLanguage = hasLang.PreferredMetadataLanguage;
-            }
+            dto.PreferredMetadataCountryCode = item.PreferredMetadataCountryCode;
+            dto.PreferredMetadataLanguage = item.PreferredMetadataLanguage;
 
             var hasCriticRating = item as IHasCriticRating;
             if (hasCriticRating != null)
@@ -1024,12 +1068,6 @@ namespace MediaBrowser.Server.Implementations.Dto
             if (hasDisplayOrder != null)
             {
                 dto.DisplayOrder = hasDisplayOrder.DisplayOrder;
-            }
-
-            var collectionFolder = item as ICollectionFolder;
-            if (collectionFolder != null)
-            {
-                dto.CollectionType = collectionFolder.CollectionType;
             }
 
             var userView = item as UserView;
@@ -1193,7 +1231,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             {
                 dto.Album = audio.Album;
 
-                var albumParent = audio.FindParent<MusicAlbum>();
+                var albumParent = audio.AlbumEntity;
 
                 if (albumParent != null)
                 {
@@ -1206,15 +1244,6 @@ namespace MediaBrowser.Server.Implementations.Dto
                 //{
                 // Songs always have one
                 //}
-            }
-
-            var album = item as MusicAlbum;
-
-            if (album != null)
-            {
-                dto.SoundtrackIds = album.SoundtrackIds
-                    .Select(i => i.ToString("N"))
-                    .ToArray();
             }
 
             var hasArtist = item as IHasArtist;
@@ -1280,7 +1309,11 @@ namespace MediaBrowser.Server.Implementations.Dto
                 dto.VideoType = video.VideoType;
                 dto.Video3DFormat = video.Video3DFormat;
                 dto.IsoType = video.IsoType;
-                dto.IsHD = video.IsHD;
+
+                if (video.HasSubtitles)
+                {
+                    dto.HasSubtitles = video.HasSubtitles;
+                }
 
                 if (video.AdditionalParts.Count != 0)
                 {
@@ -1393,9 +1426,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             {
                 dto.AirDays = series.AirDays;
                 dto.AirTime = series.AirTime;
-                dto.Status = series.Status;
-
-                dto.SeasonCount = series.SeasonCount;
+                dto.SeriesStatus = series.Status;
 
                 if (fields.Contains(ItemFields.Settings))
                 {
@@ -1488,16 +1519,11 @@ namespace MediaBrowser.Server.Implementations.Dto
                 SetPhotoProperties(dto, photo);
             }
 
-            var tvChannel = item as LiveTvChannel;
-            if (tvChannel != null)
-            {
-                dto.MediaSources = _mediaSourceManager().GetStaticMediaSources(tvChannel, true).ToList();
-            }
-
+            dto.ChannelId = item.ChannelId;
+            
             var channelItem = item as IChannelItem;
             if (channelItem != null)
             {
-                dto.ChannelId = channelItem.ChannelId;
                 dto.ChannelName = _channelManagerFactory().GetChannel(channelItem.ChannelId).Name;
             }
 
@@ -1557,7 +1583,7 @@ namespace MediaBrowser.Server.Implementations.Dto
             {
                 foreach (var map in _config.Configuration.PathSubstitutions)
                 {
-                    path = _fileSystem.SubstitutePath(path, map.From, map.To);
+                    path = _libraryManager.SubstitutePath(path, map.From, map.To);
                 }
             }
 
@@ -1596,8 +1622,9 @@ namespace MediaBrowser.Server.Implementations.Dto
         /// <param name="user">The user.</param>
         /// <param name="dto">The dto.</param>
         /// <param name="fields">The fields.</param>
+        /// <param name="syncProgress">The synchronize progress.</param>
         /// <returns>Task.</returns>
-        private void SetSpecialCounts(Folder folder, User user, BaseItemDto dto, List<ItemFields> fields)
+        private void SetSpecialCounts(Folder folder, User user, BaseItemDto dto, List<ItemFields> fields, Dictionary<string, SyncedItemProgress> syncProgress)
         {
             var recursiveItemCount = 0;
             var unplayed = 0;
@@ -1605,22 +1632,18 @@ namespace MediaBrowser.Server.Implementations.Dto
 
             DateTime? dateLastMediaAdded = null;
             double totalPercentPlayed = 0;
+            double totalSyncPercent = 0;
+            var addSyncInfo = fields.Contains(ItemFields.SyncInfo);
 
-            IEnumerable<BaseItem> children;
-
-            var season = folder as Season;
-
-            if (season != null)
+            var children = folder.GetItems(new InternalItemsQuery
             {
-                children = season
-                    .GetEpisodes(user)
-                    .Where(i => i.LocationType != LocationType.Virtual);
-            }
-            else
-            {
-                children = folder
-                    .GetRecursiveChildren(user, i => !i.IsFolder && i.LocationType != LocationType.Virtual);
-            }
+                IsFolder = false,
+                Recursive = true,
+                IsVirtualUnaired = false,
+                IsMissing = false,
+                User = user
+
+            }).Result.Items;
 
             // Loop through each recursive child
             foreach (var child in children)
@@ -1663,6 +1686,27 @@ namespace MediaBrowser.Server.Implementations.Dto
                 }
 
                 runtime += child.RunTimeTicks ?? 0;
+
+                if (addSyncInfo)
+                {
+                    double percent = 0;
+                    SyncedItemProgress syncItemProgress;
+                    if (syncProgress.TryGetValue(child.Id.ToString("N"), out syncItemProgress))
+                    {
+                        switch (syncItemProgress.Status)
+                        {
+                            case SyncJobItemStatus.Synced:
+                                percent = 100;
+                                break;
+                            case SyncJobItemStatus.Converting:
+                            case SyncJobItemStatus.ReadyToTransfer:
+                            case SyncJobItemStatus.Transferring:
+                                percent = 50;
+                                break;
+                        }
+                    }
+                    totalSyncPercent += percent;
+                }
             }
 
             dto.RecursiveItemCount = recursiveItemCount;
@@ -1671,6 +1715,15 @@ namespace MediaBrowser.Server.Implementations.Dto
             if (recursiveItemCount > 0)
             {
                 dto.UserData.PlayedPercentage = totalPercentPlayed / recursiveItemCount;
+
+                if (addSyncInfo)
+                {
+                    var pct = totalSyncPercent / recursiveItemCount;
+                    if (pct > 0)
+                    {
+                        dto.SyncPercent = pct;
+                    }
+                }
             }
 
             if (runtime > 0 && fields.Contains(ItemFields.CumulativeRunTimeTicks))
@@ -1695,12 +1748,10 @@ namespace MediaBrowser.Server.Implementations.Dto
         {
             var imageInfo = item.GetImageInfo(ImageType.Primary, 0);
 
-            if (imageInfo == null)
+            if (imageInfo == null || !imageInfo.IsLocalFile)
             {
                 return;
             }
-
-            var path = imageInfo.Path;
 
             ImageSize size;
 
@@ -1708,14 +1759,9 @@ namespace MediaBrowser.Server.Implementations.Dto
             {
                 size = _imageProcessor.GetImageSize(imageInfo);
             }
-            catch (FileNotFoundException)
-            {
-                _logger.Error("Image file does not exist: {0}", path);
-                return;
-            }
             catch (Exception ex)
             {
-                _logger.ErrorException("Failed to determine primary image aspect ratio for {0}", ex, path);
+                //_logger.ErrorException("Failed to determine primary image aspect ratio for {0}", ex, path);
                 return;
             }
 

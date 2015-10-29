@@ -13,6 +13,8 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Providers.Movies
 {
@@ -22,20 +24,20 @@ namespace MediaBrowser.Providers.Movies
         private readonly ILogger _logger;
         private readonly IJsonSerializer _jsonSerializer;
         private readonly ILibraryManager _libraryManager;
+		private readonly IFileSystem _fileSystem;
 
         private readonly CultureInfo _usCulture = new CultureInfo("en-US");
 
-        public GenericMovieDbInfo(ILogger logger, IJsonSerializer jsonSerializer, ILibraryManager libraryManager)
+		public GenericMovieDbInfo(ILogger logger, IJsonSerializer jsonSerializer, ILibraryManager libraryManager, IFileSystem fileSystem)
         {
             _logger = logger;
             _jsonSerializer = jsonSerializer;
             _libraryManager = libraryManager;
+			_fileSystem = fileSystem;
         }
 
         public async Task<MetadataResult<T>> GetMetadata(ItemLookupInfo itemId, CancellationToken cancellationToken)
         {
-            var result = new MetadataResult<T>();
-
             var tmdbId = itemId.GetProviderId(MetadataProviders.Tmdb);
             var imdbId = itemId.GetProviderId(MetadataProviders.Imdb);
 
@@ -56,12 +58,10 @@ namespace MediaBrowser.Providers.Movies
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                result.Item = await FetchMovieData(tmdbId, imdbId, itemId.MetadataLanguage, itemId.MetadataCountryCode, cancellationToken).ConfigureAwait(false);
-
-                result.HasMetadata = result.Item != null;
+                return await FetchMovieData(tmdbId, imdbId, itemId.MetadataLanguage, itemId.MetadataCountryCode, cancellationToken).ConfigureAwait(false);
             }
 
-            return result;
+            return new MetadataResult<T>();
         }
 
         /// <summary>
@@ -73,8 +73,13 @@ namespace MediaBrowser.Providers.Movies
         /// <param name="preferredCountryCode">The preferred country code.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{`0}.</returns>
-        private async Task<T> FetchMovieData(string tmdbId, string imdbId, string language, string preferredCountryCode, CancellationToken cancellationToken)
+        private async Task<MetadataResult<T>> FetchMovieData(string tmdbId, string imdbId, string language, string preferredCountryCode, CancellationToken cancellationToken)
         {
+            var item = new MetadataResult<T>
+            {
+                Item = new T()
+            };
+
             string dataFilePath = null;
             MovieDbProvider.CompleteMovieData movieInfo = null;
 
@@ -82,23 +87,26 @@ namespace MediaBrowser.Providers.Movies
             if (string.IsNullOrEmpty(tmdbId))
             {
                 movieInfo = await MovieDbProvider.Current.FetchMainResult(imdbId, false, language, cancellationToken).ConfigureAwait(false);
-                if (movieInfo == null) return null;
+                if (movieInfo != null)
+                {
+                    tmdbId = movieInfo.id.ToString(_usCulture);
 
-                tmdbId = movieInfo.id.ToString(_usCulture);
-
-                dataFilePath = MovieDbProvider.Current.GetDataFilePath(tmdbId, language);
-                Directory.CreateDirectory(Path.GetDirectoryName(dataFilePath));
-                _jsonSerializer.SerializeToFile(movieInfo, dataFilePath);
+                    dataFilePath = MovieDbProvider.Current.GetDataFilePath(tmdbId, language);
+                    _fileSystem.CreateDirectory(Path.GetDirectoryName(dataFilePath));
+                    _jsonSerializer.SerializeToFile(movieInfo, dataFilePath);
+                }
             }
 
-            await MovieDbProvider.Current.EnsureMovieInfo(tmdbId, language, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(tmdbId))
+            {
+                await MovieDbProvider.Current.EnsureMovieInfo(tmdbId, language, cancellationToken).ConfigureAwait(false);
 
-            dataFilePath = dataFilePath ?? MovieDbProvider.Current.GetDataFilePath(tmdbId, language);
-            movieInfo = movieInfo ?? _jsonSerializer.DeserializeFromFile<MovieDbProvider.CompleteMovieData>(dataFilePath);
+                dataFilePath = dataFilePath ?? MovieDbProvider.Current.GetDataFilePath(tmdbId, language);
+                movieInfo = movieInfo ?? _jsonSerializer.DeserializeFromFile<MovieDbProvider.CompleteMovieData>(dataFilePath);
 
-            var item = new T();
-
-            ProcessMainInfo(item, preferredCountryCode, movieInfo);
+                ProcessMainInfo(item, preferredCountryCode, movieInfo);
+                item.HasMetadata = true;
+            }
 
             return item;
         }
@@ -106,11 +114,13 @@ namespace MediaBrowser.Providers.Movies
         /// <summary>
         /// Processes the main info.
         /// </summary>
-        /// <param name="movie">The movie.</param>
+        /// <param name="resultItem">The result item.</param>
         /// <param name="preferredCountryCode">The preferred country code.</param>
         /// <param name="movieData">The movie data.</param>
-        private void ProcessMainInfo(T movie, string preferredCountryCode, MovieDbProvider.CompleteMovieData movieData)
+        private void ProcessMainInfo(MetadataResult<T> resultItem, string preferredCountryCode, MovieDbProvider.CompleteMovieData movieData)
         {
+            var movie = resultItem.Item;
+
             movie.Name = movieData.GetTitle() ?? movie.Name;
 
             var hasOriginalTitle = movie as IHasOriginalTitle;
@@ -183,18 +193,25 @@ namespace MediaBrowser.Providers.Movies
             //release date and certification are retrieved based on configured country and we fall back on US if not there and to minimun release date if still no match
             if (movieData.releases != null && movieData.releases.countries != null)
             {
-                var ourRelease = movieData.releases.countries.FirstOrDefault(c => c.iso_3166_1.Equals(preferredCountryCode, StringComparison.OrdinalIgnoreCase)) ?? new MovieDbProvider.Country();
-                var usRelease = movieData.releases.countries.FirstOrDefault(c => c.iso_3166_1.Equals("US", StringComparison.OrdinalIgnoreCase)) ?? new MovieDbProvider.Country();
-                var minimunRelease = movieData.releases.countries.OrderBy(c => c.release_date).FirstOrDefault() ?? new MovieDbProvider.Country();
+                var releases = movieData.releases.countries.Where(i => !string.IsNullOrWhiteSpace(i.certification)).ToList();
 
-                var ratingPrefix = string.Equals(preferredCountryCode, "us", StringComparison.OrdinalIgnoreCase) ? "" : preferredCountryCode + "-";
-                movie.OfficialRating = !string.IsNullOrEmpty(ourRelease.certification)
-                                           ? ratingPrefix + ourRelease.certification
-                                           : !string.IsNullOrEmpty(usRelease.certification)
-                                                 ? usRelease.certification
-                                                 : !string.IsNullOrEmpty(minimunRelease.certification)
-                                                       ? minimunRelease.iso_3166_1 + "-" + minimunRelease.certification
-                                                       : null;
+                var ourRelease = releases.FirstOrDefault(c => c.iso_3166_1.Equals(preferredCountryCode, StringComparison.OrdinalIgnoreCase));
+                var usRelease = releases.FirstOrDefault(c => c.iso_3166_1.Equals("US", StringComparison.OrdinalIgnoreCase));
+                var minimunRelease = releases.OrderBy(c => c.release_date).FirstOrDefault();
+
+                if (ourRelease != null)
+                {
+                    var ratingPrefix = string.Equals(preferredCountryCode, "us", StringComparison.OrdinalIgnoreCase) ? "" : preferredCountryCode + "-";
+                    movie.OfficialRating = ratingPrefix + ourRelease.certification;
+                }
+                else if (usRelease != null)
+                {
+                    movie.OfficialRating = usRelease.certification;
+                }
+                else if (minimunRelease != null)
+                {
+                    movie.OfficialRating = minimunRelease.iso_3166_1 + "-" + minimunRelease.certification;
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(movieData.release_date))
@@ -229,17 +246,32 @@ namespace MediaBrowser.Providers.Movies
                 movie.AddGenre(genre);
             }
 
+            resultItem.ResetPeople();
+
             //Actors, Directors, Writers - all in People
             //actors come from cast
             if (movieData.casts != null && movieData.casts.cast != null)
             {
-                foreach (var actor in movieData.casts.cast.OrderBy(a => a.order)) movie.AddPerson(new PersonInfo { Name = actor.name.Trim(), Role = actor.character, Type = PersonType.Actor, SortOrder = actor.order });
+                foreach (var actor in movieData.casts.cast.OrderBy(a => a.order))
+                {
+                    resultItem.AddPerson(new PersonInfo { Name = actor.name.Trim(), Role = actor.character, Type = PersonType.Actor, SortOrder = actor.order });
+                }
             }
 
             //and the rest from crew
             if (movieData.casts != null && movieData.casts.crew != null)
             {
-                foreach (var person in movieData.casts.crew) movie.AddPerson(new PersonInfo { Name = person.name.Trim(), Role = person.job, Type = person.department });
+                foreach (var person in movieData.casts.crew)
+                {
+                    // Normalize this
+                    var type = person.department;
+                    if (string.Equals(type, "writing", StringComparison.OrdinalIgnoreCase))
+                    {
+                        type = PersonType.Writer;
+                    }
+
+                    resultItem.AddPerson(new PersonInfo { Name = person.name.Trim(), Role = person.job, Type = type });
+                }
             }
 
             if (movieData.keywords != null && movieData.keywords.keywords != null)

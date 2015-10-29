@@ -18,6 +18,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 using Interfaces.IO;
 
 namespace MediaBrowser.Server.Implementations.Sync
@@ -83,12 +84,7 @@ namespace MediaBrowser.Server.Implementations.Sync
 
             foreach (var localItem in localItems)
             {
-                // TODO: Remove this after a while
-                if (string.IsNullOrWhiteSpace(localItem.FileId))
-                {
-                    jobItemIds.Add(localItem.SyncJobItemId);
-                }
-                else if (remoteIds.Contains(localItem.FileId, StringComparer.OrdinalIgnoreCase))
+                if (remoteIds.Contains(localItem.FileId, StringComparer.OrdinalIgnoreCase))
                 {
                     jobItemIds.Add(localItem.SyncJobItemId);
                 }
@@ -147,7 +143,14 @@ namespace MediaBrowser.Server.Implementations.Sync
                     progress.Report(totalProgress);
                 });
 
-                await GetItem(provider, dataProvider, target, serverId, serverName, jobItem, innerProgress, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await GetItem(provider, dataProvider, target, serverId, serverName, jobItem, innerProgress, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Error syncing item", ex);
+                }
 
                 numComplete++;
                 startingPercent = numComplete;
@@ -322,12 +325,6 @@ namespace MediaBrowser.Server.Implementations.Sync
             {
                 var files = localItem.AdditionalFiles.ToList();
 
-                // TODO: Remove this. Have to check it for now since this is a new property
-                if (!string.IsNullOrWhiteSpace(localItem.FileId))
-                {
-                    files.Insert(0, localItem.FileId);
-                }
-
                 foreach (var file in files)
                 {
                     _logger.Debug("Removing {0} from {1}.", file, target.Name);
@@ -341,6 +338,12 @@ namespace MediaBrowser.Server.Implementations.Sync
         private async Task<SyncedFileInfo> SendFile(IServerSyncProvider provider, string inputPath, string[] pathParts, SyncTarget target, SyncOptions options, IProgress<double> progress, CancellationToken cancellationToken)
         {
             _logger.Debug("Sending {0} to {1}. Remote path: {2}", inputPath, provider.Name, string.Join("/", pathParts));
+            var supportsDirectCopy = provider as ISupportsDirectCopy;
+            if (supportsDirectCopy != null)
+            {
+                return await supportsDirectCopy.SendFile(inputPath, pathParts, target, progress, cancellationToken).ConfigureAwait(false);
+            }
+
             using (var fileStream = _fileSystem.GetFileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read, true))
             {
                 Stream stream = fileStream;

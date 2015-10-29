@@ -2,18 +2,19 @@
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Library;
+using MediaBrowser.Model.LiveTv;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace MediaBrowser.Controller.LiveTv
 {
-    public interface ILiveTvRecording : IHasImages, IHasMediaSources, IHasUserData, ILiveTvItem
+    public interface ILiveTvRecording : IHasImages, IHasMediaSources, IHasUserData, ILiveTvItem, IHasStartDate, IHasProgramAttributes
     {
+        string ChannelId { get; }
         string MediaType { get; }
 
         string Container { get; }
-
-        RecordingInfo RecordingInfo { get; set; }
 
         long? RunTimeTicks { get; set; }
 
@@ -28,5 +29,12 @@ namespace MediaBrowser.Controller.LiveTv
         bool CanDelete();
 
         bool CanDelete(User user);
+
+        string SeriesTimerId { get; set; }
+        RecordingStatus Status { get; set; }
+        DateTime? EndDate { get; set; }
+        DateTime DateLastSaved { get; set; }
+        DateTime DateCreated { get; set; }
+        DateTime DateModified { get; set; }
     }
 }

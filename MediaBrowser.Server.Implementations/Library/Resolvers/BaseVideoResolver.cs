@@ -1,13 +1,10 @@
 ﻿using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Naming.Common;
 using MediaBrowser.Naming.Video;
+using MediaBrowser.Server.Implementations.Logging;
 using System;
 using System.IO;
-using System.Linq;
-using MediaBrowser.Server.Implementations.Logging;
 
 namespace MediaBrowser.Server.Implementations.Library.Resolvers
 {
@@ -182,10 +179,16 @@ namespace MediaBrowser.Server.Implementations.Library.Resolvers
                 else if (string.Equals(videoInfo.StubType, "hddvd", StringComparison.OrdinalIgnoreCase))
                 {
                     video.VideoType = VideoType.HdDvd;
+                    video.IsHD = true;
                 }
                 else if (string.Equals(videoInfo.StubType, "bluray", StringComparison.OrdinalIgnoreCase))
                 {
                     video.VideoType = VideoType.BluRay;
+                    video.IsHD = true;
+                }
+                else if (string.Equals(videoInfo.StubType, "hdtv", StringComparison.OrdinalIgnoreCase))
+                {
+                    video.IsHD = true;
                 }
             }
         }

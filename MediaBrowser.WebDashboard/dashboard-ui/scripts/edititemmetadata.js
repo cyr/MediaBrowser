@@ -4,23 +4,16 @@
     var currentSearchResult;
     var metadataEditorInfo;
 
-    function updateTabs(page, item) {
-
-        var query = MetadataEditor.getEditQueryString(item);
-
-        $('#btnEditImages', page).attr('href', 'edititemimages.html?' + query);
-        $('#btnEditSubtitles', page).attr('href', 'edititemsubtitles.html?' + query);
-        $('#btnEditCollectionTitles', page).attr('href', 'editcollectionitems.html?' + query);
-    }
-
     function reload(page) {
+
+        page = $(page)[0];
 
         unbindItemChanged(page);
         Dashboard.showLoadingMsg();
 
         var promise1 = MetadataEditor.getItemPromise();
-        var promise2 = MetadataEditor.currentItemId ?
-            ApiClient.getJSON(ApiClient.getUrl('Items/' + MetadataEditor.currentItemId + '/MetadataEditor')) :
+        var promise2 = MetadataEditor.getCurrentItemId() ?
+            ApiClient.getJSON(ApiClient.getUrl('Items/' + MetadataEditor.getCurrentItemId() + '/MetadataEditor')) :
             {};
 
         $.when(promise1, promise2).done(function (response1, response2) {
@@ -30,11 +23,12 @@
 
             currentItem = item;
 
-            if (item.Type == "UserRootFolder") {
-                $('.editPageInnerContent', page).hide();
+            if (!LibraryBrowser.supportsEditing(item.Type)) {
+                $('.editPageInnerContent', page)[0].style.visibility = 'hidden';
+                Dashboard.hideLoadingMsg();
                 return;
             } else {
-                $('.editPageInnerContent', page).show();
+                $('.editPageInnerContent', page)[0].style.visibility = 'visible';
             }
 
             var languages = metadataEditorInfo.Cultures;
@@ -49,22 +43,8 @@
 
             LibraryBrowser.renderName(item, $('.itemName', page), true);
 
-            updateTabs(page, item);
-
             setFieldVisibilities(page, item);
             fillItemInfo(page, item, metadataEditorInfo.ParentalRatingOptions);
-
-            if (item.Type == "BoxSet") {
-                $('#btnEditCollectionTitles', page).show();
-            } else {
-                $('#btnEditCollectionTitles', page).hide();
-            }
-
-            if (item.MediaType == "Video" && item.LocationType == "FileSystem" && item.Type !== 'TvChannel') {
-                $('#btnEditSubtitles', page).show();
-            } else {
-                $('#btnEditSubtitles', page).hide();
-            }
 
             if (item.MediaType == 'Photo') {
                 $('#btnEditImages', page).hide();
@@ -84,20 +64,8 @@
                 $('#fldTagline', page).hide();
             }
 
-            Dashboard.getCurrentUser().done(function (user) {
-
-                var moreCommands = LibraryBrowser.getMoreCommands(item, user);
-
-                if (moreCommands.indexOf('delete') != -1) {
-                    $('#fldDelete', page).show();
-                } else {
-                    $('#fldDelete', page).hide();
-                }
-
-                Dashboard.hideLoadingMsg();
-                bindItemChanged(page);
-            });
-
+            Dashboard.hideLoadingMsg();
+            bindItemChanged(page);
         });
     }
 
@@ -116,7 +84,7 @@
 
         }).join('');
 
-        $('#selectContentType', page).html(html).val(metadataInfo.ContentType || '').selectmenu('refresh');
+        $('#selectContentType', page).html(html).val(metadataInfo.ContentType || '');
     }
 
     function onExternalIdChange() {
@@ -145,20 +113,16 @@
             var buttonId = "btnOpen1" + idInfo.Key;
             var formatString = idInfo.UrlFormatString || '';
 
-            html += '<div data-role="fieldcontain">';
-            var idLabel = Globalize.translate('LabelDynamicExternalId').replace('{0}', idInfo.Name);
-            html += '<label for="' + id + '">' + idLabel + '</label>';
+            var labelText = Globalize.translate('LabelDynamicExternalId').replace('{0}', idInfo.Name);
 
-            html += '<div style="display: inline-block; width: 80%;">';
+            html += '<div>';
 
             var value = providerIds[idInfo.Key] || '';
 
-            html += '<input class="txtExternalId" value="' + value + '" data-providerkey="' + idInfo.Key + '" data-formatstring="' + formatString + '" data-buttonclass="' + buttonId + '" id="' + id + '" />';
-
-            html += '</div>';
+            html += '<paper-input style="display:inline-block;width:80%;" class="txtExternalId" value="' + value + '" data-providerkey="' + idInfo.Key + '" data-formatstring="' + formatString + '" data-buttonclass="' + buttonId + '" id="' + id + '" label="' + labelText + '"></paper-input>';
 
             if (formatString) {
-                html += '<a class="' + buttonId + '" href="#" target="_blank" data-icon="arrow-r" data-inline="true" data-iconpos="notext" data-role="button" style="float: none; width: 1.75em"></a>';
+                html += '<a class="clearLink ' + buttonId + '" href="#" target="_blank" data-role="none" style="float: none; width: 1.75em"><paper-icon-button icon="open-in-browser"></paper-icon-button></a>';
             }
 
             html += '</div>';
@@ -209,7 +173,7 @@
             $('#fldPlayers', page).hide();
         }
 
-        if (item.Type == "Movie" || item.Type == "Trailer" || item.Type == "MusicVideo" || item.Type == "Series" || item.Type == "Game") {
+        if (item.Type == "Movie" || item.Type == "Trailer") {
             $('#fldCriticRating', page).show();
             $('#fldCriticRatingSummary', page).show();
         } else {
@@ -316,20 +280,15 @@
             $('#fldYear', page).show();
         }
 
-        if (item.Type == "Movie" ||
-            item.Type == "Trailer" ||
-            item.Type == "Series" ||
-            item.Type == "Game" ||
-            item.Type == "BoxSet" ||
-            item.Type == "Person" ||
-            item.Type == "Book" ||
-            item.Type == "MusicAlbum" ||
-            item.Type == "MusicArtist") {
+        Dashboard.getCurrentUser().done(function (user) {
 
-            $('#btnIdentify', page).show();
-        } else {
-            $('#btnIdentify', page).hide();
-        }
+            if (LibraryBrowser.getMoreCommands(item, user).indexOf('identify') != -1) {
+
+                $('#btnIdentify', page).show();
+            } else {
+                $('#btnIdentify', page).hide();
+            }
+        });
 
         if (item.Type == "Movie" || item.Type == "Trailer" || item.Type == "BoxSet") {
             $('#keywordsCollapsible', page).show();
@@ -344,14 +303,14 @@
         }
 
         if (item.Type == "Person") {
-            $('#lblPremiereDate', page).html(Globalize.translate('LabelBirthDate'));
-            $('#lblYear', page).html(Globalize.translate('LabelBirthYear'));
-            $('#lblEndDate', page).html(Globalize.translate('LabelDeathDate'));
+            page.querySelector('#txtProductionYear').label = Globalize.translate('LabelBirthYear');
+            page.querySelector("label[for='txtPremiereDate']").innerHTML = Globalize.translate('LabelBirthDate');
+            page.querySelector("label[for='txtEndDate']").innerHTML = Globalize.translate('LabelDeathDate');
             $('#fldPlaceOfBirth', page).show();
         } else {
-            $('#lblPremiereDate', page).html(Globalize.translate('LabelReleaseDate'));
-            $('#lblYear', page).html(Globalize.translate('LabelYear'));
-            $('#lblEndDate', page).html(Globalize.translate('LabelEndDate'));
+            page.querySelector('#txtProductionYear').label = Globalize.translate('LabelYear');
+            page.querySelector("label[for='txtPremiereDate']").innerHTML = Globalize.translate('LabelReleaseDate');
+            page.querySelector("label[for='txtEndDate']").innerHTML = Globalize.translate('LabelEndDate');
             $('#fldPlaceOfBirth', page).hide();
         }
 
@@ -365,13 +324,13 @@
             $('#fldIndexNumber', page).show();
 
             if (item.Type == "Episode") {
-                $('#lblIndexNumber', page).html(Globalize.translate('LabelEpisodeNumber'));
+                page.querySelector('#txtIndexNumber').label = Globalize.translate('LabelEpisodeNumber');
             } else if (item.Type == "Season") {
-                $('#lblIndexNumber', page).html(Globalize.translate('LabelSeasonNumber'));
+                page.querySelector('#txtIndexNumber').label = Globalize.translate('LabelSeasonNumber');
             } else if (item.Type == "Audio") {
-                $('#lblIndexNumber', page).html(Globalize.translate('LabelTrackNumber'));
+                page.querySelector('#txtIndexNumber').label = Globalize.translate('LabelTrackNumber');
             } else {
-                $('#lblIndexNumber', page).html(Globalize.translate('LabelNumber'));
+                page.querySelector('#txtIndexNumber').label = Globalize.translate('LabelNumber');
             }
         } else {
             $('#fldIndexNumber', page).hide();
@@ -381,11 +340,11 @@
             $('#fldParentIndexNumber', page).show();
 
             if (item.Type == "Episode") {
-                $('#lblParentIndexNumber', page).html(Globalize.translate('LabelSeasonNumber'));
+                page.querySelector('#txtParentIndexNumber').label = Globalize.translate('LabelSeasonNumber');
             } else if (item.Type == "Audio") {
-                $('#lblParentIndexNumber', page).html(Globalize.translate('LabelDiscNumber'));
+                page.querySelector('#txtParentIndexNumber').label = Globalize.translate('LabelDiscNumber');
             } else {
-                $('#lblParentIndexNumber', page).html(Globalize.translate('LabelParentNumber'));
+                page.querySelector('#txtParentIndexNumber').label = Globalize.translate('LabelParentNumber');
             }
         } else {
             $('#fldParentIndexNumber', page).hide();
@@ -401,9 +360,9 @@
             $('#fldDisplayOrder', page).show();
 
             $('#labelDisplayOrder', page).html(Globalize.translate('LabelTitleDisplayOrder'));
-            $('#selectDisplayOrder', page).html('<option value="SortName">' + Globalize.translate('OptionSortName') + '</option><option value="PremiereDate">' + Globalize.translate('OptionReleaseDate') + '</option>').selectmenu('refresh');
+            $('#selectDisplayOrder', page).html('<option value="SortName">' + Globalize.translate('OptionSortName') + '</option><option value="PremiereDate">' + Globalize.translate('OptionReleaseDate') + '</option>');
         } else {
-            $('#selectDisplayOrder', page).html('').selectmenu('refresh');
+            $('#selectDisplayOrder', page).html('');
             $('#fldDisplayOrder', page).hide();
         }
 
@@ -425,25 +384,25 @@
 
         populateRatings(parentalRatingOptions, select, item.OfficialRating);
 
-        select.val(item.OfficialRating || "").selectmenu('refresh');
+        select.val(item.OfficialRating || "");
 
         select = $('#selectCustomRating', page);
 
         populateRatings(parentalRatingOptions, select, item.CustomRating);
 
-        select.val(item.CustomRating || "").selectmenu('refresh');
+        select.val(item.CustomRating || "");
 
         var selectStatus = $('#selectStatus', page);
         populateStatus(selectStatus);
-        selectStatus.val(item.Status || "").selectmenu('refresh');
+        selectStatus.val(item.Status || "");
 
-        $('#select3dFormat', page).val(item.Video3DFormat || "").selectmenu('refresh');
+        $('#select3dFormat', page).val(item.Video3DFormat || "");
 
         $('.chkAirDay', page).each(function () {
 
             this.checked = (item.AirDays || []).indexOf(this.getAttribute('data-day')) != -1;
 
-        }).checkboxradio('refresh');
+        });
 
         populateListView($('#listCountries', page), item.ProductionLocations || []);
         populateListView($('#listGenres', page), item.Genres);
@@ -455,19 +414,20 @@
         populateListView($('#listKeywords', page), item.Keywords);
 
         var lockData = (item.LockData || false);
-        var chkLockData = $("#chkLockData", page).attr('checked', lockData).checkboxradio('refresh');
-        if (chkLockData.checked()) {
+        var chkLockData = page.querySelector("#chkLockData");
+        chkLockData.checked = lockData;
+        if (chkLockData.checked) {
             $('#providerSettingsContainer', page).hide();
         } else {
             $('#providerSettingsContainer', page).show();
         }
         populateInternetProviderSettings(page, item, item.LockedFields);
 
-        $("#chkDisplaySpecialsInline", page).checked(item.DisplaySpecialsWithSeasons || false).checkboxradio('refresh');
+        page.querySelector('#chkDisplaySpecialsInline').checked = item.DisplaySpecialsWithSeasons || false;
 
         $('#txtPath', page).val(item.Path || '');
         $('#txtName', page).val(item.Name || "");
-        $('#txtOverview', page).val(item.Overview || "");
+        page.querySelector('#txtOverview').value = item.Overview || '';
         $('#txtShortOverview', page).val(item.ShortOverview || "");
         $('#txtTagline', page).val((item.Taglines && item.Taglines.length ? item.Taglines[0] : ''));
         $('#txtSortName', page).val(item.ForcedSortName || "");
@@ -504,7 +464,7 @@
 
         }).join(';'));
 
-        $('#selectDisplayOrder', page).val(item.DisplayOrder).selectmenu('refresh');
+        $('#selectDisplayOrder', page).val(item.DisplayOrder);
 
         $('#txtArtist', page).val((item.ArtistItems || []).map(function (a) {
 
@@ -551,15 +511,16 @@
         }
 
         $('#txtProductionYear', page).val(item.ProductionYear || "");
-        $('#txtAirTime', page).val(item.AirTime || "");
+
+        $('#txtAirTime', page).val(item.AirTime || '');
 
         var placeofBirth = item.ProductionLocations && item.ProductionLocations.length ? item.ProductionLocations[0] : '';
         $('#txtPlaceOfBirth', page).val(placeofBirth);
 
         $('#txtOriginalAspectRatio', page).val(item.AspectRatio || "");
 
-        $('#selectLanguage', page).val(item.PreferredMetadataLanguage || "").selectmenu('refresh');
-        $('#selectCountry', page).val(item.PreferredMetadataCountryCode || "").selectmenu('refresh');
+        $('#selectLanguage', page).val(item.PreferredMetadataLanguage || "");
+        $('#selectCountry', page).val(item.PreferredMetadataCountryCode || "");
 
         if (item.RunTimeTicks) {
 
@@ -626,7 +587,7 @@
         $('#popupEditPerson', page).popup("open");
 
         $('#txtPersonName', page).val(person.Name || '');
-        $('#selectPersonType', page).val(person.Type || '').selectmenu('refresh');
+        $('#selectPersonType', page).val(person.Type || '');
         $('#txtPersonRole', page).val(person.Role || '');
 
         if (index == null) {
@@ -700,7 +661,7 @@
             html += "<option value='" + rating.Value + "'>" + rating.Name + "</option>";
         }
 
-        select.html(html).selectmenu("refresh");
+        select.html(html);
     }
 
     function populateStatus(select) {
@@ -709,7 +670,7 @@
         html += "<option value=''></option>";
         html += "<option value='Continuing'>" + Globalize.translate('OptionContinuing') + "</option>";
         html += "<option value='Ended'>" + Globalize.translate('OptionEnded') + "</option>";
-        select.html(html).selectmenu("refresh");
+        select.html(html);
     }
 
     function populateListView(list, items, sortCallback) {
@@ -730,20 +691,16 @@
         return list.find('a.data').map(function () { return $(this).text(); }).get();
     }
 
-    function generateSliders(fields, type) {
+    function generateSliders(fields, currentFields) {
+
         var html = '';
         for (var i = 0; i < fields.length; i++) {
 
             var field = fields[i];
             var name = field.name;
             var value = field.value || field.name;
-            html += '<div data-role="fieldcontain">';
-            html += '<label for="lock' + value + '">' + name + '</label>';
-            html += '<select class="selectLockedField" id="lock' + value + '" data-role="slider" data-mini="true">';
-            html += '<option value="' + value + '">' + Globalize.translate('OptionOff') + '</option>';
-            html += '<option value="" selected="selected">' + Globalize.translate('OptionOn') + '</option>';
-            html += '</select>';
-            html += '</div>';
+            var checkedHtml = currentFields.indexOf(value) == -1 ? ' checked' : '';
+            html += '<paper-checkbox class="selectLockedField" data-value="' + value + '" style="display:block;margin:1em 0;"' + checkedHtml + '>' + name + '</paper-checkbox>';
         }
         return html;
     }
@@ -782,14 +739,10 @@
 
         var html = '';
 
-        html += "<h1>" + Globalize.translate('HeaderFields') + "</h1>";
-        html += "<p>" + Globalize.translate('HeaderFieldsHelp') + "</p>";
-        html += generateSliders(metadatafields, 'Fields');
-        container.html(html).trigger('create');
-        for (var fieldIndex = 0; fieldIndex < lockedFields.length; fieldIndex++) {
-            var field = lockedFields[fieldIndex];
-            $('#lock' + field).val(field).slider('refresh');
-        }
+        html += "<h1>" + Globalize.translate('HeaderEnabledFields') + "</h1>";
+        html += "<p>" + Globalize.translate('HeaderEnabledFieldsHelp') + "</p>";
+        html += generateSliders(metadatafields, lockedFields);
+        container.html(html);
     }
 
     function getSelectedAirDays(form) {
@@ -808,7 +761,11 @@
 
     function getAlbumArtists(form) {
 
-        return $('#txtAlbumArtist', form).val().split(';').map(function (a) {
+        return $('#txtAlbumArtist', form).val().trim().split(';').filter(function (s) {
+
+            return s.length > 0;
+
+        }).map(function (a) {
 
             return {
                 Name: a
@@ -818,7 +775,11 @@
 
     function getArtists(form) {
 
-        return $('#txtArtist', form).val().split(';').map(function (a) {
+        return $('#txtArtist', form).val().trim().split(';').filter(function (s) {
+
+            return s.length > 0;
+
+        }).map(function (a) {
 
             return {
                 Name: a
@@ -847,7 +808,7 @@
                 CriticRating: $('#txtCriticRating', form).val(),
                 CriticRatingSummary: $('#txtCriticRatingSummary', form).val(),
                 IndexNumber: $('#txtIndexNumber', form).val() || null,
-                DisplaySpecialsWithSeasons: $('#chkDisplaySpecialsInline', form).checked(),
+                DisplaySpecialsWithSeasons: form.querySelector('#chkDisplaySpecialsInline').checked,
                 AbsoluteEpisodeNumber: $('#txtAbsoluteEpisodeNumber', form).val(),
                 DvdEpisodeNumber: $('#txtDvdEpisodeNumber', form).val(),
                 DvdSeasonNumber: $('#txtDvdSeasonNumber', form).val(),
@@ -883,11 +844,12 @@
                 OfficialRating: $('#selectOfficialRating', form).val(),
                 CustomRating: $('#selectCustomRating', form).val(),
                 People: currentItem.People,
-                LockData: $("#chkLockData", form).prop('checked'),
-                LockedFields: $('.selectLockedField', form).map(function () {
-                    var value = $(this).val();
-                    if (value != '') return value;
-                }).get()
+                LockData: form.querySelector("#chkLockData").checked,
+                LockedFields: $('.selectLockedField', form).get().filter(function (c) {
+                    return !c.checked;
+                }).map(function (c) {
+                    return c.getAttribute('data-value');
+                })
             };
 
             item.ProviderIds = $.extend({}, currentItem.ProviderIds || {});
@@ -1017,14 +979,6 @@
             list.listview('refresh');
         };
 
-        self.onIdentificationFormSubmitted = function () {
-
-            var page = $(this).parents('.page');
-
-            searchForIdentificationResults(page);
-            return false;
-        };
-
         self.onRefreshFormSubmit = function () {
             var page = $(this).parents('.page');
 
@@ -1039,273 +993,16 @@
             savePersonInfo(page);
             return false;
         };
-
-        self.onIdentificationOptionsSubmit = function () {
-
-            var page = $(this).parents('.page');
-
-            submitIdentficationResult(page);
-            return false;
-        };
     }
 
     window.EditItemMetadataPage = new editItemMetadataPage();
-
-    function showIdentificationForm(page) {
-
-        var item = currentItem;
-
-        ApiClient.getJSON(ApiClient.getUrl("Items/" + item.Id + "/ExternalIdInfos")).done(function (idList) {
-
-            var html = '';
-
-            var providerIds = item.ProviderIds || {};
-
-            for (var i = 0, length = idList.length; i < length; i++) {
-
-                var idInfo = idList[i];
-
-                var id = "txtLookup" + idInfo.Key;
-
-                html += '<div data-role="fieldcontain">';
-
-                var idLabel = Globalize.translate('LabelDynamicExternalId').replace('{0}', idInfo.Name);
-                html += '<label for="' + id + '">' + idLabel + '</label>';
-
-                var value = providerIds[idInfo.Key] || '';
-
-                html += '<input class="txtLookupId" value="' + value + '" data-providerkey="' + idInfo.Key + '" id="' + id + '" data-mini="true" />';
-
-                html += '</div>';
-            }
-
-            $('#txtLookupName', page).val(item.Name);
-
-            if (item.Type == "Person" || item.Type == "BoxSet") {
-
-                $('.fldLookupYear', page).hide();
-                $('#txtLookupYear', page).val('');
-            } else {
-
-                $('.fldLookupYear', page).show();
-                $('#txtLookupYear', page).val(item.ProductionYear);
-            }
-
-            $('.identifyProviderIds', page).html(html).trigger('create');
-
-            $('.identificationHeader', page).html(Globalize.translate('HeaderIdentify'));
-
-            $('.popupIdentifyForm', page).show();
-            $('.identificationSearchResults', page).hide();
-            $('.identifyOptionsForm', page).hide();
-            $('.btnIdentifyBack', page).hide();
-
-            $('.popupIdentify', page).popup('open');
-        });
-    }
-
-    function searchForIdentificationResults(page) {
-
-        var lookupInfo = {
-            ProviderIds: {}
-        };
-
-        $('.identifyField', page).each(function () {
-
-            var value = this.value;
-
-            if (value) {
-
-                if (this.type == 'number') {
-                    value = parseInt(value);
-                }
-
-                lookupInfo[this.getAttribute('data-lookup')] = value;
-            }
-
-        });
-
-        var hasId = false;
-
-        $('.txtLookupId', page).each(function () {
-
-            var value = this.value;
-
-            if (value) {
-                hasId = true;
-            }
-            lookupInfo.ProviderIds[this.getAttribute('data-providerkey')] = value;
-
-        });
-
-        if (!hasId && !lookupInfo.Name) {
-            Dashboard.alert(Globalize.translate('MessagePleaseEnterNameOrId'));
-            return;
-        }
-
-        if (currentItem.GameSystem) {
-            lookupInfo.GameSystem = currentItem.GameSystem;
-        }
-
-        lookupInfo = {
-            SearchInfo: lookupInfo,
-            IncludeDisabledProviders: true
-        };
-
-        Dashboard.showLoadingMsg();
-
-        ApiClient.ajax({
-            type: "POST",
-            url: ApiClient.getUrl("Items/RemoteSearch/" + currentItem.Type),
-            data: JSON.stringify(lookupInfo),
-            contentType: "application/json"
-
-        }).done(function (results) {
-
-            Dashboard.hideLoadingMsg();
-            showIdentificationSearchResults(page, results);
-        });
-    }
-
-    function getSearchImageDisplayUrl(url, provider) {
-        return ApiClient.getUrl("Items/RemoteSearch/Image", { imageUrl: url, ProviderName: provider });
-    }
-
-    function getSearchResultHtml(result, index) {
-
-        var html = '';
-        var cssClass = "searchImageContainer remoteImageContainer";
-
-        if (currentItem.Type == "Episode") {
-            cssClass += " searchBackdropImageContainer";
-        }
-        else if (currentItem.Type == "MusicAlbum" || currentItem.Type == "MusicArtist") {
-            cssClass += " searchDiscImageContainer";
-        }
-        else {
-            cssClass += " searchPosterImageContainer";
-        }
-
-        html += '<div class="' + cssClass + '">';
-
-        if (result.ImageUrl) {
-            var displayUrl = getSearchImageDisplayUrl(result.ImageUrl, result.SearchProviderName);
-
-            html += '<a href="#" class="searchImage" data-index="' + index + '" style="background-image:url(\'' + displayUrl + '\');">';
-        } else {
-
-            html += '<a href="#" class="searchImage" data-index="' + index + '" style="background-image:url(\'css/images/items/list/remotesearch.png\');background-position: center center;">';
-        }
-        html += '</a>';
-
-        html += '<div class="remoteImageDetails">';
-        html += result.Name;
-        html += '</div>';
-
-        html += '<div class="remoteImageDetails">';
-        html += result.ProductionYear || '&nbsp;';
-        html += '</div>';
-
-        if (result.GameSystem) {
-            html += '<div class="remoteImageDetails">';
-            html += result.GameSystem;
-            html += '</div>';
-        }
-
-        html += '</div>';
-        return html;
-    }
-
-    function showIdentificationSearchResults(page, results) {
-
-        $('.popupIdentifyForm', page).hide();
-        $('.identificationSearchResults', page).show();
-        $('.identifyOptionsForm', page).hide();
-        $('.btnIdentifyBack', page).show();
-
-        var html = '';
-
-        for (var i = 0, length = results.length; i < length; i++) {
-
-            var result = results[i];
-
-            html += getSearchResultHtml(result, i);
-        }
-
-        var elem = $('.identificationSearchResultList', page).html(html).trigger('create');
-
-        $('.searchImage', elem).on('click', function () {
-
-            var index = parseInt(this.getAttribute('data-index'));
-
-            var currentResult = results[index];
-
-            showIdentifyOptions(page, currentResult);
-        });
-    }
-
-    function showIdentifyOptions(page, identifyResult) {
-
-        $('.popupIdentifyForm', page).hide();
-        $('.identificationSearchResults', page).hide();
-        $('.identifyOptionsForm', page).show();
-        $('.btnIdentifyBack', page).show();
-        $('#chkIdentifyReplaceImages', page).checked(true).checkboxradio('refresh');
-
-        currentSearchResult = identifyResult;
-
-        var lines = [];
-        lines.push(identifyResult.Name);
-
-        if (identifyResult.ProductionYear) {
-            lines.push(identifyResult.ProductionYear);
-        }
-
-        if (identifyResult.GameSystem) {
-            lines.push(identifyResult.GameSystem);
-        }
-
-        var resultHtml = lines.join('<br/>');
-
-        if (identifyResult.ImageUrl) {
-            var displayUrl = getSearchImageDisplayUrl(identifyResult.ImageUrl, identifyResult.SearchProviderName);
-
-            resultHtml = '<img src="' + displayUrl + '" style="max-height:160px;" /><br/>' + resultHtml;
-        }
-
-        $('.selectedSearchResult', page).html(resultHtml);
-    }
-
-    function submitIdentficationResult(page) {
-
-        Dashboard.showLoadingMsg();
-
-        var options = {
-            ReplaceAllImages: $('#chkIdentifyReplaceImages', page).checked()
-        };
-
-        ApiClient.ajax({
-            type: "POST",
-            url: ApiClient.getUrl("Items/RemoteSearch/Apply/" + currentItem.Id, options),
-            data: JSON.stringify(currentSearchResult),
-            contentType: "application/json"
-
-        }).done(function () {
-
-            Dashboard.hideLoadingMsg();
-
-            $('.popupIdentify', page).popup('close');
-
-            reload(page);
-        });
-    }
 
     function performAdvancedRefresh(page) {
 
         $('.popupAdvancedRefresh', page).popup('open');
 
-        $('#selectMetadataRefreshMode', page).val('all').selectmenu('refresh');
-        $('#selectImageRefreshMode', page).val('missing').selectmenu('refresh');
+        $('#selectMetadataRefreshMode', page).val('all');
+        $('#selectImageRefreshMode', page).val('missing');
     }
 
     function performSimpleRefresh(page) {
@@ -1338,9 +1035,17 @@
 
     function refreshWithOptions(page, options) {
 
-        $('#refreshLoading', page).show();
+        Dashboard.showLoadingMsg();
 
         ApiClient.refreshItem(currentItem.Id, options);
+
+        if (!ApiClient.isWebSocketOpen()) {
+
+            // For now this is a hack
+            setTimeout(function () {
+                Dashboard.hideLoadingMsg();
+            }, 5000);
+        }
     }
 
     function onWebSocketMessageReceived(e, data) {
@@ -1353,9 +1058,8 @@
 
                 var page = $.mobile.activePage;
 
-                console.log('Item updated - reloading metadata');
+                Logger.log('Item updated - reloading metadata');
                 reload(page);
-                $('#refreshLoading', page).hide();
             }
         }
     }
@@ -1370,56 +1074,100 @@
         $(ApiClient).off("websocketmessage", onWebSocketMessageReceived);
     }
 
+    function onItemDeleted(e, itemId) {
+
+        if (currentItem && currentItem.Id == itemId) {
+
+            if (currentItem.ParentId) {
+                Dashboard.navigate('edititemmetadata.html?id=' + currentItem.ParentId);
+            } else {
+                Dashboard.navigate('edititemmetadata.html');
+            }
+        }
+    }
+
+    function showMoreMenu(page, elem) {
+
+        Dashboard.getCurrentUser().done(function (user) {
+
+            var moreCommands = LibraryBrowser.getMoreCommands(currentItem, user);
+
+            var menuItems = [];
+
+            menuItems.push({
+                name: Globalize.translate('ButtonAdvancedRefresh'),
+                id: 'refresh',
+                ironIcon: 'refresh'
+            });
+
+            if (moreCommands.indexOf('delete') != -1) {
+                menuItems.push({
+                    name: Globalize.translate('ButtonDelete'),
+                    id: 'delete',
+                    ironIcon: 'delete'
+                });
+            }
+
+            menuItems.push({
+                name: Globalize.translate('ButtonEditImages'),
+                id: 'editimages',
+                ironIcon: 'photo'
+            });
+
+            require(['actionsheet'], function () {
+
+                ActionSheetElement.show({
+                    items: menuItems,
+                    positionTo: elem,
+                    callback: function (id) {
+
+                        switch (id) {
+
+                            case 'refresh':
+                                performAdvancedRefresh(page);
+                                break;
+                            case 'delete':
+                                LibraryBrowser.deleteItem(currentItem.Id);
+                                break;
+                            case 'editimages':
+                                LibraryBrowser.editImages(currentItem.Id);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                });
+
+            });
+
+        });
+    }
+
     $(document).on('pageinit', "#editItemMetadataPage", function () {
 
         var page = this;
 
-        $('.btnRefreshAdvanced', this).on('click', function () {
+        $('.btnSimpleRefresh', this).on('click', function () {
 
             performAdvancedRefresh(page);
         });
 
-        $('.btnSimpleRefresh', this).on('click', function () {
+        $('.btnEditImages', page).on('click', function () {
 
-            performSimpleRefresh(page);
+            LibraryBrowser.editImages(currentItem.Id);
         });
 
         $('#btnIdentify', page).on('click', function () {
 
-            showIdentificationForm(page);
-        });
-
-        $('.btnIdentifyBack', page).on('click', function () {
-
-            if ($('.identifyOptionsForm', page).is(':visible')) {
-
-                $('.identifyOptionsForm', page).hide();
-
-                $('.identificationSearchResults', page).show();
-                $('.popupIdentifyForm', page).hide();
-            } else {
-
-                $('.identificationSearchResults', page).hide();
-                $('.popupIdentifyForm', page).show();
-                $(this).hide();
-            }
-        });
-
-        $('#btnDelete', this).on('click', function () {
-            LibraryBrowser.deleteItem(currentItem.Id);
+            LibraryBrowser.identifyItem(currentItem.Id);
         });
 
         $('.libraryTree', page).on('itemclicked', function (event, data) {
 
             if (data.id != currentItem.Id) {
 
-                MetadataEditor.currentItemId = data.id;
-                MetadataEditor.currentItemType = data.itemType;
-                //Dashboard.navigate('edititemmetadata.html?id=' + data.id);
-
                 //$.mobile.urlHistory.ignoreNextHashChange = true;
                 window.location.hash = 'editItemMetadataPage?id=' + data.id;
-
                 reload(page);
             }
         });
@@ -1429,31 +1177,27 @@
             editPerson(page, {});
         });
 
-    }).on('pagebeforeshow', "#editItemMetadataPage", function () {
+        $('.editItemMetadataForm').off('submit', EditItemMetadataPage.onSubmit).on('submit', EditItemMetadataPage.onSubmit);
+        $('.popupEditPersonForm').off('submit', EditItemMetadataPage.onPersonInfoFormSubmit).on('submit', EditItemMetadataPage.onPersonInfoFormSubmit);
+        $('.popupAdvancedRefreshForm').off('submit', EditItemMetadataPage.onRefreshFormSubmit).on('submit', EditItemMetadataPage.onRefreshFormSubmit);
 
-        var page = this;
-
-        reload(page);
-
-        $(LibraryBrowser).on('itemdeleting.editor', function (e, itemId) {
-
-            if (currentItem && currentItem.Id == itemId) {
-
-                if (currentItem.ParentId) {
-                    Dashboard.navigate('edititemmetadata.html?id=' + currentItem.ParentId);
-                } else {
-                    Dashboard.navigate('edititemmetadata.html');
-                }
-            }
+        $('.btnMore', page).on('click', function () {
+            showMoreMenu(page, this);
         });
 
-    }).on('pagehide', "#editItemMetadataPage", function () {
+    }).on('pageshow', "#editItemMetadataPage", function () {
 
         var page = this;
-        $(LibraryBrowser).off('itemdeleting.editor');
+
+        $(LibraryBrowser).on('itemdeleting', onItemDeleted);
+        reload(page);
+
+    }).on('pagebeforehide', "#editItemMetadataPage", function () {
+
+        var page = this;
+        $(LibraryBrowser).off('itemdeleting', onItemDeleted);
 
         unbindItemChanged(page);
-
     });
 
 })(jQuery, document, window);

@@ -38,31 +38,38 @@
             type: 'POST',
             data: {
 
-                Name: $('#txtUsername', form).val(),
-                ConnectUserName: $('#txtConnectUserName', form).val()
+                Name: form.querySelector('#txtUsername').value,
+                ConnectUserName: form.querySelector('#txtConnectUserName').value
 
             },
             url: apiClient.getUrl('Startup/User'),
             dataType: 'json'
 
-        }).done(onUpdateUserComplete);
+        }).done(onUpdateUserComplete).fail(function () {
+
+            var msgKey = form.querySelector('#txtConnectUserName').value ? 'ErrorAddingEmbyConnectAccount' : 'DefaultErrorMessage';
+
+            Dashboard.alert({
+
+                message: Globalize.translate(msgKey)
+
+            });
+        });
     }
 
-    function wizardUserPage() {
+    function onSubmit() {
+        var form = this;
 
-        var self = this;
+        submit(form);
 
-        self.onSubmit = function () {
-            var form = this;
-
-
-            submit(form);
-
-            return false;
-        };
+        return false;
     }
 
-    $(document).on('pageshow', "#wizardUserPage", function () {
+    $(document).on('pageinit', "#wizardUserPage", function () {
+
+        $('.wizardUserForm').off('submit', onSubmit).on('submit', onSubmit);
+
+    }).on('pageshow', "#wizardUserPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -72,14 +79,12 @@
 
         apiClient.getJSON(apiClient.getUrl('Startup/User')).done(function (user) {
 
-            $('#txtUsername', page).val(user.Name);
-            $('#txtConnectUserName', page).val(user.ConnectUserName);
+            page.querySelector('#txtUsername').value = user.Name;
+            page.querySelector('#txtConnectUserName').value = user.ConnectUserName;
 
             Dashboard.hideLoadingMsg();
         });
 
     });
-
-    window.WizardUserPage = new wizardUserPage();
 
 })(jQuery, document, window);

@@ -1,7 +1,9 @@
 ﻿using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Security;
 using MediaBrowser.Common.Updates;
+using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Plugins;
@@ -25,6 +27,7 @@ namespace MediaBrowser.Api
     [Authenticated]
     public class GetPlugins : IReturn<List<PluginInfo>>
     {
+        public bool? IsAppStoreEnabled { get; set; }
     }
 
     /// <summary>
@@ -39,7 +42,7 @@ namespace MediaBrowser.Api
         /// </summary>
         /// <value>The id.</value>
         [ApiMember(Name = "Id", Description = "Plugin Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "DELETE")]
-        public Guid Id { get; set; }
+        public string Id { get; set; }
     }
 
     /// <summary>
@@ -54,7 +57,7 @@ namespace MediaBrowser.Api
         /// </summary>
         /// <value>The id.</value>
         [ApiMember(Name = "Id", Description = "Plugin Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
-        public Guid Id { get; set; }
+        public string Id { get; set; }
     }
 
     /// <summary>
@@ -69,7 +72,7 @@ namespace MediaBrowser.Api
         /// </summary>
         /// <value>The id.</value>
         [ApiMember(Name = "Id", Description = "Plugin Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "POST")]
-        public Guid Id { get; set; }
+        public string Id { get; set; }
 
         /// <summary>
         /// The raw Http Request Input Stream
@@ -115,6 +118,14 @@ namespace MediaBrowser.Api
         public string Name { get; set; }
     }
 
+    [Route("/Appstore/Register", "POST", Summary = "Registers an appstore sale")]
+    [Authenticated]
+    public class RegisterAppstoreSale
+    {
+        [ApiMember(Name = "Parameters", Description = "Java representation of parameters to pass through to admin server", IsRequired = true, DataType = "string", ParameterType = "query", Verb = "POST")]
+        public string Parameters { get; set; }
+    }
+
     /// <summary>
     /// Class PluginsService
     /// </summary>
@@ -133,8 +144,10 @@ namespace MediaBrowser.Api
         private readonly ISecurityManager _securityManager;
 
         private readonly IInstallationManager _installationManager;
+        private readonly INetworkManager _network;
+        private readonly IDeviceManager _deviceManager;
 
-        public PluginService(IJsonSerializer jsonSerializer, IApplicationHost appHost, ISecurityManager securityManager, IInstallationManager installationManager)
+        public PluginService(IJsonSerializer jsonSerializer, IApplicationHost appHost, ISecurityManager securityManager, IInstallationManager installationManager, INetworkManager network, IDeviceManager deviceManager)
             : base()
         {
             if (jsonSerializer == null)
@@ -145,6 +158,8 @@ namespace MediaBrowser.Api
             _appHost = appHost;
             _securityManager = securityManager;
             _installationManager = installationManager;
+            _network = network;
+            _deviceManager = deviceManager;
             _jsonSerializer = jsonSerializer;
         }
 
@@ -164,13 +179,15 @@ namespace MediaBrowser.Api
         {
             var result = await _securityManager.GetRegistrationStatus(request.Name).ConfigureAwait(false);
 
-            return ToOptimizedResult(new RegistrationInfo
+            var info = new RegistrationInfo
             {
                 ExpirationDate = result.ExpirationDate,
                 IsRegistered = result.IsRegistered,
                 IsTrial = result.TrialVersion,
                 Name = request.Name
-            });
+            };
+
+            return ToOptimizedResult(info);
         }
 
         /// <summary>
@@ -181,6 +198,7 @@ namespace MediaBrowser.Api
         public async Task<object> Get(GetPlugins request)
         {
             var result = _appHost.Plugins.OrderBy(p => p.Name).Select(p => p.GetPluginInfo()).ToList();
+            var requireAppStoreEnabled = request.IsAppStoreEnabled.HasValue && request.IsAppStoreEnabled.Value;
 
             // Don't fail just on account of image url's
             try
@@ -197,10 +215,26 @@ namespace MediaBrowser.Api
                         plugin.ImageUrl = pkg.thumbImage;
                     }
                 }
+
+                if (requireAppStoreEnabled)
+                {
+                    result = result
+                        .Where(plugin =>
+                        {
+                            var pkg = packages.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.guid) && new Guid(plugin.Id).Equals(new Guid(i.guid)));
+                            return pkg != null && pkg.enableInAppStore;
+                  
+                        })
+                        .ToList();
+                }
             }
             catch
             {
-
+                // Play it safe here
+                if (requireAppStoreEnabled)
+                {
+                    result = new List<PluginInfo>();
+                }
             }
 
             return ToOptimizedSerializedResultUsingCache(result);
@@ -213,7 +247,8 @@ namespace MediaBrowser.Api
         /// <returns>System.Object.</returns>
         public object Get(GetPluginConfiguration request)
         {
-            var plugin = _appHost.Plugins.First(p => p.Id == request.Id);
+            var guid = new Guid(request.Id);
+            var plugin = _appHost.Plugins.First(p => p.Id == guid);
 
             var dateModified = plugin.ConfigurationDateLastModified;
 
@@ -236,6 +271,16 @@ namespace MediaBrowser.Api
             };
 
             return ToOptimizedSerializedResultUsingCache(result);
+        }
+
+        /// <summary>
+        /// Post app store sale
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        public async Task Post(RegisterAppstoreSale request)
+        {
+            await _securityManager.RegisterAppStoreSale(request.Parameters);
         }
 
         /// <summary>
@@ -272,7 +317,8 @@ namespace MediaBrowser.Api
         /// <param name="request">The request.</param>
         public void Delete(UninstallPlugin request)
         {
-            var plugin = _appHost.Plugins.First(p => p.Id == request.Id);
+            var guid = new Guid(request.Id);
+            var plugin = _appHost.Plugins.First(p => p.Id == guid);
 
             _installationManager.UninstallPlugin(plugin);
         }

@@ -158,6 +158,11 @@ namespace MediaBrowser.Model.Dlna
 
             if (MediaType == DlnaProfileType.Audio)
             {
+                if (StringHelper.EqualsIgnoreCase(SubProtocol, "hls"))
+                {
+                    return string.Format("{0}/audio/{1}/master.m3u8?{2}", baseUrl, ItemId, queryString);
+                }
+
                 return string.Format("{0}/audio/{1}/stream{2}?{3}", baseUrl, ItemId, extension, queryString);
             }
 
@@ -324,7 +329,7 @@ namespace MediaBrowser.Model.Dlna
 
         private SubtitleStreamInfo GetSubtitleStreamInfo(MediaStream stream, string baseUrl, string accessToken, long startPositionTicks, SubtitleProfile[] subtitleProfiles)
         {
-            SubtitleProfile subtitleProfile = StreamBuilder.GetSubtitleProfile(stream, subtitleProfiles, Context);
+            SubtitleProfile subtitleProfile = StreamBuilder.GetSubtitleProfile(stream, subtitleProfiles, Context, PlayMethod);
             SubtitleStreamInfo info = new SubtitleStreamInfo
             {
                 IsForced = stream.IsForced,
@@ -481,6 +486,21 @@ namespace MediaBrowser.Model.Dlna
                 return !string.IsNullOrEmpty(VideoProfile) && !IsDirectStream
                     ? VideoProfile
                     : stream == null ? null : stream.Profile;
+            }
+        }
+
+        /// <summary>
+        /// Gets the target video codec tag.
+        /// </summary>
+        /// <value>The target video codec tag.</value>
+        public string TargetVideoCodecTag
+        {
+            get
+            {
+                MediaStream stream = TargetVideoStream;
+                return !IsDirectStream
+                    ? null
+                    : stream == null ? null : stream.CodecTag;
             }
         }
 

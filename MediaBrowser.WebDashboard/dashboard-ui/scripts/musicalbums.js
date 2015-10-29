@@ -1,48 +1,73 @@
 ﻿(function ($, document) {
 
-    var view = LibraryBrowser.getDefaultItemsView('PosterCard', 'PosterCard');
+    var data = {};
+    function getPageData() {
+        var key = getSavedQueryKey();
+        var pageData = data[key];
 
-    // The base query options
-    var query = {
+        if (!pageData) {
+            pageData = data[key] = {
+                query: {
+                    SortBy: "AlbumArtist,SortName",
+                    SortOrder: "Ascending",
+                    IncludeItemTypes: "MusicAlbum",
+                    Recursive: true,
+                    Fields: "PrimaryImageAspectRatio,SortName,SyncInfo",
+                    StartIndex: 0,
+                    ImageTypeLimit: 1,
+                    EnableImageTypes: "Primary,Backdrop,Banner,Thumb",
+                    Limit: LibraryBrowser.getDefaultPageSize()
+                },
+                view: LibraryBrowser.getSavedView(key) || LibraryBrowser.getDefaultItemsView('Poster', 'Poster')
+            };
 
-        SortBy: "AlbumArtist,SortName",
-        SortOrder: "Ascending",
-        IncludeItemTypes: "MusicAlbum",
-        Recursive: true,
-        Fields: "PrimaryImageAspectRatio,SortName,SyncInfo",
-        StartIndex: 0,
-        ImageTypeLimit: 1,
-        EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
-    };
+            pageData.query.ParentId = LibraryMenu.getTopParentId();
+            LibraryBrowser.loadSavedQueryValues(key, pageData.query);
+        }
+        return pageData;
+    }
+
+    function getQuery() {
+
+        return getPageData().query;
+    }
 
     function getSavedQueryKey() {
 
-        return 'musicalbums' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey('albums');
     }
 
-    function reloadItems(page) {
+    function reloadItems(page, viewPanel) {
 
         Dashboard.showLoadingMsg();
+
+        var query = getQuery();
 
         ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
 
             var html = '';
+            var view = getPageData().view;
             var pagingHtml = LibraryBrowser.getQueryPagingHtml({
                 startIndex: query.StartIndex,
                 limit: query.Limit,
                 totalRecordCount: result.TotalRecordCount,
                 viewButton: true,
                 showLimit: false,
-                addSelectionButton: true
+                sortButton: true,
+                viewPanelClass: 'albumsViewPanel',
+                addLayoutButton: true,
+                currentLayout: view,
+                updatePageSizeSetting: false,
+                viewIcon: 'filter-list',
+                layouts: 'List,Poster,PosterCard,Timeline'
             });
 
-            $('.listTopPaging', page).html(pagingHtml).trigger('create');
+            page.querySelector('.listTopPaging').innerHTML = pagingHtml;
 
-            updateFilterControls(page);
-            var trigger = false;
+            updateFilterControls(page, viewPanel);
 
             if (view == "Poster") {
                 html = LibraryBrowser.getPosterViewHtml({
@@ -51,7 +76,9 @@
                     context: 'music',
                     showTitle: true,
                     showParentTitle: true,
-                    lazy: true
+                    lazy: true,
+                    centerText: true,
+                    overlayPlayButton: true
                 });
             }
             else if (view == "PosterCard") {
@@ -74,7 +101,6 @@
                     context: 'music',
                     sortBy: query.SortBy
                 });
-                trigger = true;
             }
             else if (view == "Timeline") {
                 html = LibraryBrowser.getPosterViewHtml({
@@ -88,100 +114,103 @@
                 });
             }
 
-            var elem = $('#items', page).html(html).lazyChildren();
-
-            if (trigger) {
-                elem.trigger('create');
-            }
-
-            $(pagingHtml).appendTo(elem).trigger('create');
+            var elem = page.querySelector('#items');
+            elem.innerHTML = html + pagingHtml;
+            ImageLoader.lazyChildren(elem);
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
-                reloadItems(page);
+                reloadItems(page, viewPanel);
             });
 
             $('.btnPreviousPage', page).on('click', function () {
                 query.StartIndex -= query.Limit;
-                reloadItems(page);
+                reloadItems(page, viewPanel);
+            });
+
+            $('.btnChangeLayout', page).on('layoutchange', function (e, layout) {
+
+                if (layout == 'Timeline') {
+                    getQuery().SortBy = 'PremiereDate,SortName';
+                    getQuery().SortOrder = 'Descending';
+                }
+
+                getPageData().view = layout;
+                LibraryBrowser.saveViewSetting(getSavedQueryKey(), layout);
+                reloadItems(page, viewPanel);
+            });
+
+            // On callback make sure to set StartIndex = 0
+            $('.btnSort', page).on('click', function () {
+                LibraryBrowser.showSortMenu({
+                    items: [{
+                        name: Globalize.translate('OptionNameSort'),
+                        id: 'SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionAlbumArtist'),
+                        id: 'AlbumArtist,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionCommunityRating'),
+                        id: 'CommunityRating,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionCriticRating'),
+                        id: 'CriticRating,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionDateAdded'),
+                        id: 'DateCreated,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionReleaseDate'),
+                        id: 'ProductionYear,PremiereDate,SortName'
+                    }],
+                    callback: function () {
+                        reloadItems(page, viewPanel);
+                    },
+                    query: query
+                });
             });
 
             LibraryBrowser.saveQueryValues(getSavedQueryKey(), query);
-
+            LibraryBrowser.setLastRefreshed(page);
             Dashboard.hideLoadingMsg();
         });
     }
 
-    function updateFilterControls(page) {
+    function updateFilterControls(page, viewPanel) {
 
-        $('#selectView', page).val(view).selectmenu('refresh');
-
-        // Reset form values using the last used query
-        $('.radioSortBy', page).each(function () {
-
-            this.checked = (query.SortBy || '').toLowerCase() == this.getAttribute('data-sortby').toLowerCase();
-
-        }).checkboxradio('refresh');
-
-        $('.radioSortOrder', page).each(function () {
-
-            this.checked = (query.SortOrder || '').toLowerCase() == this.getAttribute('data-sortorder').toLowerCase();
-
-        }).checkboxradio('refresh');
+        var query = getQuery();
 
         $('.alphabetPicker', page).alphaValue(query.NameStartsWith);
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
     }
 
-    var filtersLoaded;
-    function reloadFiltersIfNeeded(page) {
+    function reloadFiltersIfNeeded(page, viewPanel) {
 
-        if (!filtersLoaded) {
+        if (!getPageData().filtersLoaded) {
 
-            filtersLoaded = true;
+            getPageData().filtersLoaded = true;
 
-            QueryFilters.loadFilters(page, Dashboard.getCurrentUserId(), query, function () {
+            var query = getQuery();
+            QueryFilters.loadFilters(viewPanel, Dashboard.getCurrentUserId(), query, function () {
 
-                reloadItems(page);
+                reloadItems(page, viewPanel);
             });
         }
     }
 
-    $(document).on('pageinit', "#musicAlbumsPage", function () {
+    function initPage(tabContent, viewPanel) {
 
-        var page = this;
+        $(viewPanel).on('panelopen', function () {
 
-        $('.viewPanel', page).on('panelopen', function () {
-
-            reloadFiltersIfNeeded(page);
+            reloadFiltersIfNeeded(tabContent, viewPanel);
         });
 
-        $('.radioSortBy', page).on('click', function () {
-            query.SortBy = this.getAttribute('data-sortby');
-            query.StartIndex = 0;
+        $('.chkStandardFilter', viewPanel).on('change', function () {
 
-            // Clear this
-            $('.alphabetPicker', page).alphaClear();
-            query.NameStartsWithOrGreater = '';
-            query.AlbumArtistStartsWithOrGreater = '';
-
-            reloadItems(page);
-        });
-
-        $('.radioSortOrder', page).on('click', function () {
-            query.SortOrder = this.getAttribute('data-sortorder');
-            query.StartIndex = 0;
-
-            // Clear this
-            $('.alphabetPicker', page).alphaClear();
-            query.NameStartsWithOrGreater = '';
-            query.AlbumArtistStartsWithOrGreater = '';
-
-            reloadItems(page);
-        });
-
-        $('.chkStandardFilter', page).on('change', function () {
-
+            var query = getQuery();
             var filterName = this.getAttribute('data-filter');
             var filters = query.Filters || "";
 
@@ -194,27 +223,12 @@
             query.StartIndex = 0;
             query.Filters = filters;
 
-            reloadItems(page);
+            reloadItems(tabContent, viewPanel);
         });
 
-        $('#selectView', page).on('change', function () {
+        $('.alphabetPicker', tabContent).on('alphaselect', function (e, character) {
 
-            view = this.value;
-
-            if (view == "Timeline") {
-
-                query.SortBy = "PremiereDate";
-                query.SortOrder = "Descending";
-                query.StartIndex = 0;
-                $('#radioPremiereDate', page)[0].click();
-
-            } else {
-                reloadItems(page);
-            }
-            LibraryBrowser.saveViewSetting(getSavedQueryKey(), view);
-        });
-
-        $('.alphabetPicker', page).on('alphaselect', function (e, character) {
+            var query = getQuery();
 
             if (query.SortBy.indexOf('AlbumArtist') == -1) {
                 query.NameStartsWithOrGreater = character;
@@ -226,69 +240,31 @@
 
             query.StartIndex = 0;
 
-            reloadItems(page);
+            reloadItems(tabContent, viewPanel);
 
         }).on('alphaclear', function (e) {
+
+            var query = getQuery();
 
             query.NameStartsWithOrGreater = '';
             query.AlbumArtistStartsWithOrGreater = '';
 
-            reloadItems(page);
+            reloadItems(tabContent, viewPanel);
         });
+    }
 
-        $('#selectPageSize', page).on('change', function () {
-            query.Limit = parseInt(this.value);
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
+    window.MusicPage.initAlbumsTab = function (page, tabContent) {
 
-    }).on('pagebeforeshow', "#musicAlbumsPage", function () {
+        var viewPanel = page.querySelector('.albumsViewPanel');
+        initPage(tabContent, viewPanel);
+    };
 
-        query.ParentId = LibraryMenu.getTopParentId();
+    window.MusicPage.renderAlbumsTab = function (page, tabContent) {
 
-        var page = this;
-        var limit = LibraryBrowser.getDefaultPageSize();
-        
-        // If the default page size has changed, the start index will have to be reset
-        if (limit != query.Limit) {
-            query.Limit = limit;
-            query.StartIndex = 0;
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            var viewPanel = page.querySelector('.albumsViewPanel');
+            reloadItems(tabContent, viewPanel);
         }
-
-        var viewKey = getSavedQueryKey();
-        LibraryBrowser.loadSavedQueryValues(viewKey, query);
-        QueryFilters.onPageShow(page, query);
-
-        LibraryBrowser.getSavedViewSetting(viewKey).done(function (val) {
-
-            if (val) {
-                $('#selectView', page).val(val).selectmenu('refresh').trigger('change');
-            } else {
-                reloadItems(page);
-            }
-        });
-
-    }).on('pageshow', "#musicAlbumsPage", function () {
-
-        updateFilterControls(this);
-
-        var updateScheduled = false;
-        function onscreen() {
-            var viewportBottom = $(window).scrollTop() + $(window).height();
-            return ($(document).height() - viewportBottom) < 100;
-        }
-        $(window).on('scroll', function () {
-            console.log('load');
-            if (!updateScheduled) {
-                setTimeout(function () {
-                    if (onscreen()) {
-                        console.log('load');
-                    }
-                    updateScheduled = false;
-                }, 500);
-                updateScheduled = true;
-            }
-        });
-    });
+    };
 
 })(jQuery, document);

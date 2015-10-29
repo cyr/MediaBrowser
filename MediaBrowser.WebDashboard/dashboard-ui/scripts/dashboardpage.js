@@ -6,6 +6,12 @@
 
         var page = this;
 
+        var apiClient = ApiClient;
+
+        if (!apiClient) {
+            return;
+        }
+
         if (Dashboard.lastSystemInfo) {
             Dashboard.setPageTitle(Dashboard.lastSystemInfo.ServerName);
         }
@@ -14,9 +20,9 @@
 
         Dashboard.showLoadingMsg();
         DashboardPage.pollForInfo(page);
-        DashboardPage.startInterval();
+        DashboardPage.startInterval(apiClient);
 
-        $(ApiClient).on("websocketmessage", DashboardPage.onWebSocketMessage)
+        $(apiClient).on("websocketmessage", DashboardPage.onWebSocketMessage)
             .on("websocketopen", DashboardPage.onWebSocketOpen);
 
         DashboardPage.lastAppUpdateCheck = null;
@@ -33,7 +39,9 @@
 
         $('.activityItems', page).activityLogList();
 
-        $('.swaggerLink', page).attr('href', ApiClient.getUrl('swagger-ui/index.html'));
+        $('.swaggerLink', page).attr('href', apiClient.getUrl('swagger-ui/index.html', {
+            api_key: ApiClient.accessToken()
+        }));
     },
 
     onPageHide: function () {
@@ -42,8 +50,12 @@
 
         $('.activityItems', page).activityLogList('destroy');
 
-        $(ApiClient).off("websocketmessage", DashboardPage.onWebSocketMessage).off("websocketopen", DashboardPage.onWebSocketConnectionChange).off("websocketerror", DashboardPage.onWebSocketConnectionChange).off("websocketclose", DashboardPage.onWebSocketConnectionChange);
-        DashboardPage.stopInterval();
+        var apiClient = ApiClient;
+
+        if (apiClient) {
+            $(apiClient).off("websocketmessage", DashboardPage.onWebSocketMessage).off("websocketopen", DashboardPage.onWebSocketConnectionChange).off("websocketerror", DashboardPage.onWebSocketConnectionChange).off("websocketclose", DashboardPage.onWebSocketConnectionChange);
+            DashboardPage.stopInterval(apiClient);
+        }
 
         if (DashboardPage.sessionUpdateTimer) {
             clearInterval(DashboardPage.sessionUpdateTimer);
@@ -63,7 +75,7 @@
         var list = DashboardPage.sessionsList;
 
         if (list) {
-            console.log('refreshSessionsLocally');
+            Logger.log('refreshSessionsLocally');
             DashboardPage.renderActiveConnections($.mobile.activePage, list);
         }
     },
@@ -83,11 +95,7 @@
                 $('#ports', page).html(Globalize.translate('LabelRunningOnPort', '<b>' + systemInfo.HttpServerPortNumber + '</b>'));
             }
 
-            if (systemInfo.CanSelfRestart) {
-                $('.btnRestartContainer', page).removeClass('hide');
-            } else {
-                $('.btnRestartContainer', page).addClass('hide');
-            }
+            $('.btnRestartContainer', page).visible(systemInfo.CanSelfRestart);
 
             DashboardPage.renderUrls(page, systemInfo);
             DashboardPage.renderPendingInstallations(page, systemInfo);
@@ -109,7 +117,7 @@
 
         var query = {
             StartIndex: DashboardPage.newsStartIndex,
-            Limit: 5
+            Limit: 7
         };
 
         ApiClient.getProductNews(query).done(function (result) {
@@ -118,21 +126,43 @@
 
                 var itemHtml = '';
 
-                itemHtml += '<div class="newsItem">';
-                itemHtml += '<a class="newsItemHeader" href="' + item.Link + '" target="_blank">' + item.Title + '</a>';
+                itemHtml += '<a class="clearLink" href="' + item.Link + '" target="_blank">';
+                itemHtml += '<paper-icon-item>';
 
-                var date = parseISO8601Date(item.Date, { toLocal: true });
-                itemHtml += '<div class="newsItemDate">' + date.toLocaleDateString() + '</div>';
+                itemHtml += '<paper-fab mini class="blue" icon="dvr" item-icon></paper-fab>';
 
-                itemHtml += '<div class="newsItemDescription">' + item.Description + '</div>';
+                itemHtml += '<paper-item-body three-line>';
+
+                itemHtml += '<div>';
+                itemHtml += item.Title;
                 itemHtml += '</div>';
+
+                itemHtml += '<div secondary>';
+                var date = parseISO8601Date(item.Date, { toLocal: true });
+                itemHtml += date.toLocaleDateString();
+                itemHtml += '</div>';
+
+                itemHtml += '<div secondary>';
+                itemHtml += item.Description;
+                itemHtml += '</div>';
+
+                itemHtml += '</paper-item-body>';
+
+                itemHtml += '</paper-icon-item>';
+                itemHtml += '</a>';
 
                 return itemHtml;
             });
 
             var pagingHtml = '';
             pagingHtml += '<div>';
-            pagingHtml += LibraryBrowser.getPagingHtml(query, result.TotalRecordCount, false, [], false);
+            pagingHtml += LibraryBrowser.getQueryPagingHtml({
+                startIndex: query.StartIndex,
+                limit: query.Limit,
+                totalRecordCount: result.TotalRecordCount,
+                showLimit: false,
+                updatePageSizeSetting: false
+            });
             pagingHtml += '</div>';
 
             html = html.join('') + pagingHtml;
@@ -152,19 +182,19 @@
 
     },
 
-    startInterval: function () {
+    startInterval: function (apiClient) {
 
-        if (ApiClient.isWebSocketOpen()) {
-            ApiClient.sendWebSocketMessage("SessionsStart", "0,1500");
-            ApiClient.sendWebSocketMessage("ScheduledTasksInfoStart", "0,1000");
+        if (apiClient.isWebSocketOpen()) {
+            apiClient.sendWebSocketMessage("SessionsStart", "0,1500");
+            apiClient.sendWebSocketMessage("ScheduledTasksInfoStart", "0,1000");
         }
     },
 
-    stopInterval: function () {
+    stopInterval: function (apiClient) {
 
-        if (ApiClient.isWebSocketOpen()) {
-            ApiClient.sendWebSocketMessage("SessionsStop");
-            ApiClient.sendWebSocketMessage("ScheduledTasksInfoStop");
+        if (apiClient.isWebSocketOpen()) {
+            apiClient.sendWebSocketMessage("SessionsStop");
+            apiClient.sendWebSocketMessage("ScheduledTasksInfoStop");
         }
     },
 
@@ -199,16 +229,24 @@
 
     onWebSocketOpen: function () {
 
-        DashboardPage.startInterval();
+        var apiClient = this;
+
+        DashboardPage.startInterval(apiClient);
     },
 
     pollForInfo: function (page, forceUpdate) {
 
-        ApiClient.getSessions().done(function (sessions) {
+        var apiClient = window.ApiClient;
+
+        if (!apiClient) {
+            return;
+        }
+
+        apiClient.getSessions().done(function (sessions) {
 
             DashboardPage.renderInfo(page, sessions, forceUpdate);
         });
-        ApiClient.getScheduledTasks().done(function (tasks) {
+        apiClient.getScheduledTasks().done(function (tasks) {
 
             DashboardPage.renderRunningTasks(page, tasks);
         });
@@ -590,10 +628,13 @@
     getClientImage: function (connection) {
 
         var clientLowered = connection.Client.toLowerCase();
+        var device = connection.DeviceName.toLowerCase();
 
-        if (clientLowered == "dashboard") {
+        if (connection.AppIconUrl) {
+            return "<img src='" + connection.AppIconUrl + "' />";
+        }
 
-            var device = connection.DeviceName.toLowerCase();
+        if (clientLowered == "dashboard" || clientLowered == "emby web client") {
 
             var imgUrl;
 
@@ -613,31 +654,21 @@
                 imgUrl = 'css/images/clients/html5.png';
             }
 
-            return "<img src='" + imgUrl + "' alt='Dashboard' />";
+            return "<img src='" + imgUrl + "' alt='Emby Web Client' />";
+        }
+        if (clientLowered.indexOf('android') != -1) {
+            return "<img src='css/images/clients/android.png' />";
+        }
+        if (clientLowered.indexOf('ios') != -1) {
+            return "<img src='css/images/clients/ios.png' />";
         }
         if (clientLowered == "mb-classic") {
 
             return "<img src='css/images/clients/mbc.png' />";
         }
-        if (clientLowered == "emby theater") {
-
-            return "<img src='css/images/clients/mb.png' />";
-        }
-        if (clientLowered == "android" || clientLowered == "androidtv") {
-
-            return "<img src='css/images/clients/android.png' />";
-        }
-        if (clientLowered == "nuvue") {
-
-            return "<img src='css/images/clients/nuvue.png' />";
-        }
         if (clientLowered == "roku") {
 
             return "<img src='css/images/clients/roku.jpg' />";
-        }
-        if (clientLowered == "ios") {
-
-            return "<img src='css/images/clients/ios.png' />";
         }
         if (clientLowered == "windows rt") {
 
@@ -651,22 +682,13 @@
 
             return "<img src='css/images/clients/dlna.png' />";
         }
-        if (clientLowered == "mbkinect") {
-
-            return "<img src='css/images/clients/mbkinect.png' />";
-        }
         if (clientLowered == "kodi" || clientLowered == "xbmc") {
             return "<img src='css/images/clients/kodi.png' />";
         }
         if (clientLowered == "chromecast") {
 
-            return "<img src='css/images/chromecast/ic_media_route_on_holo_light.png' />";
+            return "<img src='css/images/clients/chromecast.png' />";
         }
-        if (clientLowered == "chrome companion") {
-
-            return "<img src='css/images/clients/chrome_companion.png' />";
-        }
-
 
         return null;
     },
@@ -710,7 +732,7 @@
         var html = '';
 
         tasks = tasks.filter(function (t) {
-            return t.State != 'Idle';
+            return t.State != 'Idle' && !t.IsHidden;
         });
 
         if (tasks.filter(function (t) {
@@ -747,7 +769,7 @@
 
                 html += "<span style='color:#009F00;margin-left:5px;margin-right:5px;'>" + progress + "%</span>";
 
-                html += '<button type="button" data-icon="stop" data-iconpos="notext" data-inline="true" data-mini="true" onclick="DashboardPage.stopTask(\'' + task.Id + '\');">' + Globalize.translate('ButtonStop') + '</button>';
+                html += '<paper-icon-button title="' + Globalize.translate('ButtonStop') + '" icon="cancel" onclick="DashboardPage.stopTask(\'' + task.Id + '\');"></paper-icon-button>';
             }
             else if (task.State == "Cancelling") {
                 html += '<span style="color:#cc0000;">' + Globalize.translate('LabelStopping') + '</span>';
@@ -787,18 +809,21 @@
 
         var imgUrl, text;
 
-        if (pluginSecurityInfo.IsMBSupporter) {
+        if (!AppInfo.enableSupporterMembership) {
+            $('.supporterIconContainer', page).remove();
+        }
+        else if (pluginSecurityInfo.IsMBSupporter) {
 
             imgUrl = "css/images/supporter/supporterbadge.png";
             text = Globalize.translate('MessageThankYouForSupporting');
 
-            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="supporter.html" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /></a><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span>');
+            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="http://emby.media/premiere" target="_blank" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /></a><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span>');
         } else {
 
             imgUrl = "css/images/supporter/nonsupporterbadge.png";
             text = Globalize.translate('MessagePleaseSupportProject');
 
-            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="supporter.html" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span></a>');
+            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="http://emby.media/premiere" target="_blank" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span></a>');
         }
     },
 
@@ -978,8 +1003,7 @@
     }
 };
 
-$(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
-    .on('pagehide', "#dashboardPage", DashboardPage.onPageHide);
+$(document).on('pageshow', "#dashboardPage", DashboardPage.onPageShow).on('pagebeforehide', "#dashboardPage", DashboardPage.onPageHide);
 
 (function ($, document, window) {
 
@@ -992,23 +1016,19 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
             showOverlayTimeout = null;
         }
 
-        $('.cardOverlayTarget:visible', this).each(function () {
+        var elem = this.querySelector('.cardOverlayTarget');
 
-            var elem = this;
+        if ($(elem).is(':visible')) {
+            require(["jquery", "velocity"], function ($, Velocity) {
 
-            $(this).animate({ "height": "0" }, "fast", function () {
-
-                $(elem).hide();
-
+                Velocity.animate(elem, { "height": "0" },
+                {
+                    complete: function () {
+                        $(elem).hide();
+                    }
+                });
             });
-
-        });
-
-        $('.cardOverlayTarget:visible', this).stop().animate({ "height": "0" }, function () {
-
-            $(this).hide();
-
-        });
+        }
     }
 
     $.fn.createSessionItemMenus = function () {
@@ -1044,16 +1064,13 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
             }, 1000);
         }
 
-        // https://hacks.mozilla.org/2013/04/detecting-touch-its-the-why-not-the-how/
-
-        if (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0)) {
+        if (AppInfo.isTouchPreferred) {
             /* browser with either Touch Events of Pointer Events
                running on touch-capable device */
             return this;
         }
 
-        return this.off('.sessionItemMenu').on('mouseenter.sessionItemMenu', '.playingSession', onHoverIn)
-            .on('mouseleave.sessionItemMenu', '.playingSession', onHoverOut);
+        return this.off('mouseenter', '.playingSession', onHoverIn).off('mouseleave', '.playingSession', onHoverOut).on('mouseenter', '.playingSession', onHoverIn).on('mouseleave', '.playingSession', onHoverOut);
     };
 
 })(jQuery, document, window);
@@ -1065,60 +1082,42 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
 
         var html = '';
 
-        html += '<div class="newsItem" style="padding: .5em 0;">';
+        html += '<paper-icon-item>';
 
-        html += '<div class="notificationContent" style="display:block;">';
+        var color = entry.Severity == 'Error' || entry.Severity == 'Fatal' || entry.Severity == 'Warn' ? '#cc0000' : '#52B54B';
 
-        var date = parseISO8601Date(entry.Date, { toLocal: true });
-
-        var color = entry.Severity == 'Error' || entry.Severity == 'Fatal' || entry.Severity == 'Warn' ? '#cc0000' : 'green';
-
-        html += '<div style="margin: 0;color:' + color + ';">';
         if (entry.UserId && entry.UserPrimaryImageTag) {
 
             var userImgUrl = ApiClient.getUserImageUrl(entry.UserId, {
                 type: 'Primary',
                 tag: entry.UserPrimaryImageTag,
-                height: 20
+                height: 40
             });
-            html += '<img src="' + userImgUrl + '" style="height:20px;vertical-align:middle;margin-right:5px;" />';
+
+            html += '<paper-fab mini style="background-color:' + color + ';background-image:url(\'' + userImgUrl + '\');background-repeat:no-repeat;background-position:center center;background-size: cover;" item-icon></paper-fab>';
+        }
+        else {
+            html += '<paper-fab mini icon="dvr" style="background-color:' + color + '" item-icon></paper-fab>';
         }
 
-        html += date.toLocaleDateString() + ' ' + date.toLocaleTimeString().toLowerCase();
-        html += '</div>';
+        html += '<paper-item-body three-line>';
 
-        html += '<div class="notificationName" style="margin:.5em 0 0;white-space:nowrap;">';
+        html += '<div>';
         html += entry.Name;
         html += '</div>';
 
-        entry.ShortOverview = entry.ShortOverview || '&nbsp;';
-
-        if (entry.ShortOverview) {
-
-            html += '<div class="newsItemDescription" style="margin: .5em 0 0;">';
-
-            if (entry.Overview) {
-                html += '<a href="#" class="btnShowOverview" style="text-decoration:none;font-weight:500;">';
-            }
-            html += entry.ShortOverview;
-            if (entry.Overview) {
-                html += '</a>';
-            }
-
-            html += '</div>';
-
-            if (entry.Overview) {
-                html += '<div class="newsItemLongDescription" style="display:none;">' + entry.Overview + '</div>';
-            }
-        }
-
-        //if (notification.Url) {
-        //    html += '<p style="margin: .25em 0;"><a href="' + notification.Url + '" target="_blank">' + Globalize.translate('ButtonMoreInformation') + '</a></p>';
-        //}
-
+        html += '<div secondary>';
+        var date = parseISO8601Date(entry.Date, { toLocal: true });
+        html += date.toLocaleDateString() + ' ' + date.toLocaleTimeString().toLowerCase();
         html += '</div>';
 
+        html += '<div secondary>';
+        html += entry.ShortOverview || '';
         html += '</div>';
+
+        html += '</paper-item-body>';
+
+        html += '</paper-icon-item>';
 
         return html;
     }
@@ -1131,7 +1130,13 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
 
             var query = { StartIndex: startIndex, Limit: limit };
 
-            html += LibraryBrowser.getPagingHtml(query, result.TotalRecordCount, false, limit, false);
+            html += LibraryBrowser.getQueryPagingHtml({
+                startIndex: query.StartIndex,
+                limit: query.Limit,
+                totalRecordCount: result.TotalRecordCount,
+                showLimit: false,
+                updatePageSizeSetting: false
+            });
         }
 
         $(elem).html(html).trigger('create');
@@ -1189,59 +1194,79 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
         elem.each(function () {
 
             reloadData(this);
-        });
 
-        $(ApiClient).on('websocketmessage.activityloglistener', function (e, data) {
+        }).addClass('activityLogListWidget');
 
-            var msg = data;
+        var apiClient = ApiClient;
 
-            if (msg.MessageType === "ActivityLogEntry") {
-                elem.each(function () {
+        if (!apiClient) {
+            return;
+        }
 
-                    reloadData(this);
-                });
-            }
-
-        }).on('websocketopen.activityloglistener', function (e, data) {
-
-            startListening();
-        });
+        $(apiClient).on('websocketmessage', onSocketMessage).on('websocketopen', onSocketOpen);
     }
 
-    function startListening() {
+    function startListening(apiClient) {
 
-        if (ApiClient.isWebSocketOpen()) {
-            ApiClient.sendWebSocketMessage("ActivityLogEntryStart", "0,1500");
+        if (apiClient.isWebSocketOpen()) {
+            apiClient.sendWebSocketMessage("ActivityLogEntryStart", "0,1500");
         }
 
     }
 
-    function stopListening() {
+    function stopListening(apiClient) {
 
-        if (ApiClient.isWebSocketOpen()) {
-            ApiClient.sendWebSocketMessage("ActivityLogEntryStop", "0,1500");
+        if (apiClient.isWebSocketOpen()) {
+            apiClient.sendWebSocketMessage("ActivityLogEntryStop", "0,1500");
         }
 
+    }
+
+    function onSocketOpen() {
+
+        var apiClient = ApiClient;
+        if (apiClient) {
+            startListening(apiClient);
+        }
+    }
+
+    function onSocketMessage(e, data) {
+
+        var msg = data;
+
+        if (msg.MessageType === "ActivityLogEntry") {
+            $('.activityLogListWidget').each(function () {
+
+                reloadData(this);
+            });
+        }
     }
 
     function destroyList(elem) {
 
-        $(ApiClient).off('websocketopen.activityloglistener').off('websocketmessage.activityloglistener');
+        var apiClient = ApiClient;
 
-        stopListening();
+        if (apiClient) {
+            $(apiClient).off('websocketopen', onSocketOpen).off('websocketmessage', onSocketOpen);
 
-        return this;
+            stopListening(apiClient);
+        }
     }
 
     $.fn.activityLogList = function (action) {
 
         if (action == 'destroy') {
+            this.removeClass('activityLogListWidget');
             destroyList(this);
         } else {
             createList(this);
         }
 
-        startListening();
+        var apiClient = ApiClient;
+
+        if (apiClient) {
+            startListening(apiClient);
+        }
 
         return this;
     };
@@ -1260,15 +1285,15 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
             result.CustomPrefs[welcomeTourKey] = welcomeDismissValue;
             ApiClient.updateDisplayPreferences('dashboard', result, userId, 'dashboard');
 
-            $(page).off('pagebeforeshow.checktour');
+            $(page).off('pageshow', onPageShowCheckTour);
         });
     }
 
-    function showWelcomeIfNeeded(page) {
+    function showWelcomeIfNeeded(page, apiClient) {
 
         var userId = Dashboard.getCurrentUserId();
 
-        ApiClient.getDisplayPreferences('dashboard', userId, 'dashboard').done(function (result) {
+        apiClient.getDisplayPreferences('dashboard', userId, 'dashboard').done(function (result) {
 
             if (result.CustomPrefs[welcomeTourKey] == welcomeDismissValue) {
                 $('.welcomeMessage', page).hide();
@@ -1292,61 +1317,66 @@ $(document).on('pagebeforeshow', "#dashboardPage", DashboardPage.onPageShow)
 
     function takeTour(page, userId) {
 
-        $.swipebox([
-                { href: 'css/images/tour/dashboard/dashboard.png', title: Globalize.translate('DashboardTourDashboard') },
-                { href: 'css/images/tour/dashboard/help.png', title: Globalize.translate('DashboardTourHelp') },
-                { href: 'css/images/tour/dashboard/users.png', title: Globalize.translate('DashboardTourUsers') },
-                { href: 'css/images/tour/dashboard/sync.png', title: Globalize.translate('DashboardTourSync') },
-                { href: 'css/images/tour/dashboard/cinemamode.png', title: Globalize.translate('DashboardTourCinemaMode') },
-                { href: 'css/images/tour/dashboard/chapters.png', title: Globalize.translate('DashboardTourChapters') },
-                { href: 'css/images/tour/dashboard/subtitles.png', title: Globalize.translate('DashboardTourSubtitles') },
-                { href: 'css/images/tour/dashboard/plugins.png', title: Globalize.translate('DashboardTourPlugins') },
-                { href: 'css/images/tour/dashboard/notifications.png', title: Globalize.translate('DashboardTourNotifications') },
-                { href: 'css/images/tour/dashboard/scheduledtasks.png', title: Globalize.translate('DashboardTourScheduledTasks') },
-                { href: 'css/images/tour/dashboard/mobile.png', title: Globalize.translate('DashboardTourMobile') },
-                { href: 'css/images/tour/enjoy.jpg', title: Globalize.translate('MessageEnjoyYourStay') }
-        ], {
-            afterClose: function () {
-                dismissWelcome(page, userId);
-                $('.welcomeMessage', page).hide();
-            },
-            hideBarsDelay: 30000
+        Dashboard.loadSwipebox().done(function () {
+
+            $.swipebox([
+                    { href: 'css/images/tour/dashboard/dashboard.png', title: Globalize.translate('DashboardTourDashboard') },
+                    { href: 'css/images/tour/dashboard/help.png', title: Globalize.translate('DashboardTourHelp') },
+                    { href: 'css/images/tour/dashboard/users.png', title: Globalize.translate('DashboardTourUsers') },
+                    { href: 'css/images/tour/dashboard/sync.png', title: Globalize.translate('DashboardTourSync') },
+                    { href: 'css/images/tour/dashboard/cinemamode.png', title: Globalize.translate('DashboardTourCinemaMode') },
+                    { href: 'css/images/tour/dashboard/chapters.png', title: Globalize.translate('DashboardTourChapters') },
+                    { href: 'css/images/tour/dashboard/subtitles.png', title: Globalize.translate('DashboardTourSubtitles') },
+                    { href: 'css/images/tour/dashboard/plugins.png', title: Globalize.translate('DashboardTourPlugins') },
+                    { href: 'css/images/tour/dashboard/notifications.png', title: Globalize.translate('DashboardTourNotifications') },
+                    { href: 'css/images/tour/dashboard/scheduledtasks.png', title: Globalize.translate('DashboardTourScheduledTasks') },
+                    { href: 'css/images/tour/dashboard/mobile.png', title: Globalize.translate('DashboardTourMobile') },
+                    { href: 'css/images/tour/enjoy.jpg', title: Globalize.translate('MessageEnjoyYourStay') }
+            ], {
+                afterClose: function () {
+                    dismissWelcome(page, userId);
+                    $('.welcomeMessage', page).hide();
+                },
+                hideBarsDelay: 30000
+            });
         });
+    }
+
+    function onPageShowCheckTour() {
+        var page = this;
+
+        var apiClient = ApiClient;
+
+        if (apiClient && !AppInfo.isNativeApp) {
+            showWelcomeIfNeeded(page, apiClient);
+        }
     }
 
     $(document).on('pageinit', "#dashboardPage", function () {
 
         var page = this;
 
-        var userId = Dashboard.getCurrentUserId();
-
         $('.btnTakeTour', page).on('click', function () {
-            takeTour(page, userId);
+            takeTour(page, Dashboard.getCurrentUserId());
         });
 
-    }).on('pagebeforeshow.checktour', "#dashboardPage", function () {
-
-        var page = this;
-
-        showWelcomeIfNeeded(page);
-
-    });
+    }).on('pageshow', "#dashboardPage", onPageShowCheckTour);
 
 })(jQuery, document, window);
 
 (function () {
 
-    $(document).on('pagebeforeshow', ".type-interior", function () {
+    $(document).on('pageshow', ".type-interior", function () {
 
         var page = this;
 
         Dashboard.getPluginSecurityInfo().done(function (pluginSecurityInfo) {
 
-            if (!$('.staticSupporterPromotion', page).length) {
+            if (!$('.customSupporterPromotion', page).length) {
                 $('.supporterPromotion', page).remove();
 
-                if (!pluginSecurityInfo.IsMBSupporter) {
-                    $('.content-primary', page).append('<div class="supporterPromotion"><a class="btn btnActionAccent" href="supporter.html" style="font-size:14px;"><div>' + Globalize.translate('HeaderSupportTheTeam') + '</div><div style="font-weight:normal;font-size:90%;margin-top:5px;">' + Globalize.translate('TextEnjoyBonusFeatures') + '</div></a></div>');
+                if (!pluginSecurityInfo.IsMBSupporter && AppInfo.enableSupporterMembership) {
+                    $('.content-primary', page).append('<div class="supporterPromotion"><a class="btn btnActionAccent" href="http://emby.media/premiere" target="_blank" style="font-size:14px;"><div>' + Globalize.translate('HeaderSupportTheTeam') + '</div><div style="font-weight:normal;font-size:90%;margin-top:5px;">' + Globalize.translate('TextEnjoyBonusFeatures') + '</div></a></div>');
                 }
             }
 

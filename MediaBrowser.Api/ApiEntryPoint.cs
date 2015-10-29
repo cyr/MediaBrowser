@@ -15,6 +15,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Api
 {
@@ -95,7 +96,7 @@ namespace MediaBrowser.Api
         {
             var path = _config.ApplicationPaths.TranscodingTempPath;
 
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+            foreach (var file in _fileSystem.GetFilePaths(path, true)
                 .ToList())
             {
                 _fileSystem.DeleteFile(file);
@@ -228,7 +229,7 @@ namespace MediaBrowser.Api
         {
             lock (_activeTranscodingJobs)
             {
-                var job = _activeTranscodingJobs.First(j => j.Type == type && j.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+                var job = _activeTranscodingJobs.First(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
 
                 _activeTranscodingJobs.Remove(job);
             }
@@ -254,15 +255,7 @@ namespace MediaBrowser.Api
         {
             lock (_activeTranscodingJobs)
             {
-                return _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && j.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-            }
-        }
-
-        public TranscodingJob GetTranscodingJob(string id)
-        {
-            lock (_activeTranscodingJobs)
-            {
-                return _activeTranscodingJobs.FirstOrDefault(j => j.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+                return _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
             }
         }
 
@@ -275,7 +268,7 @@ namespace MediaBrowser.Api
         {
             lock (_activeTranscodingJobs)
             {
-                var job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && j.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+                var job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
 
                 if (job == null)
                 {
@@ -339,14 +332,11 @@ namespace MediaBrowser.Api
                 return;
             }
 
-            var timerDuration = job.Type == TranscodingJobType.Progressive ?
-                1000 :
-                1800000;
+            var timerDuration = 1000;
 
-            // We can really reduce the timeout for apps that are using the newer api
-            if (!string.IsNullOrWhiteSpace(job.PlaySessionId) && job.Type != TranscodingJobType.Progressive)
+            if (job.Type != TranscodingJobType.Progressive)
             {
-                timerDuration = 60000;
+                timerDuration = 1800000;
             }
 
             job.PingTimeout = timerDuration;
@@ -459,7 +449,7 @@ namespace MediaBrowser.Api
             job.DisposeKillTimer();
 
             Logger.Debug("KillTranscodingJob - JobId {0} PlaySessionId {1}. Killing transcoding", job.Id, job.PlaySessionId);
-            
+
             lock (_activeTranscodingJobs)
             {
                 _activeTranscodingJobs.Remove(job);
@@ -578,7 +568,7 @@ namespace MediaBrowser.Api
             var directory = Path.GetDirectoryName(outputFilePath);
             var name = Path.GetFileNameWithoutExtension(outputFilePath);
 
-            var filesToDelete = Directory.EnumerateFiles(directory)
+            var filesToDelete = _fileSystem.GetFilePaths(directory)
                 .Where(f => f.IndexOf(name, StringComparison.OrdinalIgnoreCase) != -1)
                 .ToList();
 
@@ -588,7 +578,7 @@ namespace MediaBrowser.Api
             {
                 try
                 {
-                    Logger.Info("Deleting HLS file {0}", file);
+                    Logger.Debug("Deleting HLS file {0}", file);
                     _fileSystem.DeleteFile(file);
                 }
                 catch (DirectoryNotFoundException)
@@ -628,6 +618,9 @@ namespace MediaBrowser.Api
         /// </summary>
         /// <value>The live stream identifier.</value>
         public string LiveStreamId { get; set; }
+
+        public bool IsLiveOutput { get; set; }
+
         /// <summary>
         /// Gets or sets the path.
         /// </summary>

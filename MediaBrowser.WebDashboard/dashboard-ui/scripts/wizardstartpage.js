@@ -6,7 +6,7 @@
 
             return '<option value="' + l.Value + '">' + l.Name + '</option>';
 
-        })).val(config.UICulture).selectmenu('refresh');
+        })).val(config.UICulture);
 
         Dashboard.hideLoadingMsg();
     }
@@ -22,7 +22,7 @@
             config.UICulture = $('#selectLocalizationLanguage', page).val();
 
             apiClient.ajax({
-                
+
                 type: 'POST',
                 data: config,
                 url: apiClient.getUrl('Startup/Configuration')
@@ -36,7 +36,17 @@
 
     }
 
-    $(document).on('pageshow', "#wizardStartPage", function () {
+    function onSubmit() {
+        save($(this).parents('.page'));
+
+        return false;
+    }
+
+    $(document).on('pageinit', "#wizardStartPage", function () {
+
+        $('.wizardStartForm').off('submit', onSubmit).on('submit', onSubmit);
+
+    }).on('pageshow', "#wizardStartPage", function () {
 
         Dashboard.showLoadingMsg();
         var page = this;
@@ -53,15 +63,5 @@
 
         });
     });
-
-    window.WizardStartPage = {
-
-        onSubmit: function () {
-
-            save($(this).parents('.page'));
-
-            return false;
-        }
-    };
 
 })(window, jQuery);

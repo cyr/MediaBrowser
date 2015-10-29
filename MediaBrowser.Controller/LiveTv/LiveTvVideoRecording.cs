@@ -1,8 +1,11 @@
 ﻿using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Users;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -11,23 +14,50 @@ namespace MediaBrowser.Controller.LiveTv
 {
     public class LiveTvVideoRecording : Video, ILiveTvRecording
     {
+        [IgnoreDataMember]
+        public string EpisodeTitle { get; set; }
+        [IgnoreDataMember]
+        public bool IsSeries { get; set; }
+        public string SeriesTimerId { get; set; }
+        [IgnoreDataMember]
+        public DateTime StartDate { get; set; }
+        public RecordingStatus Status { get; set; }
+        [IgnoreDataMember]
+        public bool IsSports { get; set; }
+        [IgnoreDataMember]
+        public bool IsNews { get; set; }
+        [IgnoreDataMember]
+        public bool IsKids { get; set; }
+        [IgnoreDataMember]
+        public bool IsRepeat { get; set; }
+        [IgnoreDataMember]
+        public bool IsMovie { get; set; }
+        [IgnoreDataMember]
+        public bool IsLive { get; set; }
+        [IgnoreDataMember]
+        public bool IsPremiere { get; set; }
+        public ProgramAudio? Audio { get; set; }
+
         /// <summary>
         /// Gets the user data key.
         /// </summary>
         /// <returns>System.String.</returns>
         protected override string CreateUserDataKey()
         {
+            if (IsMovie)
+            {
+                var key = Movie.GetMovieUserDataKey(this);
+
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    return key;
+                }
+            }
+            
             var name = GetClientTypeName();
 
-            if (!string.IsNullOrEmpty(RecordingInfo.ProgramId))
-            {
-                return name + "-" + RecordingInfo.ProgramId;
-            }
-
-            return name + "-" + RecordingInfo.Name + (RecordingInfo.EpisodeTitle ?? string.Empty);
+            return name + "-" + Name + (EpisodeTitle ?? string.Empty);
         }
-
-        public RecordingInfo RecordingInfo { get; set; }
 
         public string ServiceName { get; set; }
 
@@ -77,6 +107,7 @@ namespace MediaBrowser.Controller.LiveTv
             return false;
         }
 
+        [IgnoreDataMember]
         public override bool SupportsLocalMetadata
         {
             get
@@ -93,6 +124,11 @@ namespace MediaBrowser.Controller.LiveTv
         protected override string GetInternalMetadataPath(string basePath)
         {
             return System.IO.Path.Combine(basePath, "livetv", Id.ToString("N"));
+        }
+
+        public override bool CanDelete()
+        {
+            return true;
         }
 
         public override bool IsAuthorizedToDelete(User user)

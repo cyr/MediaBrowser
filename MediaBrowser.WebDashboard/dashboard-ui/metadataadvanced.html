@@ -4,7 +4,7 @@
     <title>${TitleMetadata}</title>
 </head>
 <body>
-    <div id="advancedMetadataConfigurationPage" data-role="page" class="page type-interior metadataConfigurationPage">
+    <div id="advancedMetadataConfigurationPage" data-role="page" class="page type-interior metadataConfigurationPage" data-require="scripts/metadataadvanced,paperbuttonstyle">
 
         <div data-role="content">
 
@@ -17,16 +17,14 @@
                     <a href="#" data-role="button" class="ui-btn-active">${TabAdvanced}</a>
                 </div>
 
-                <form id="advancedMetadataConfigurationForm">
+                <form class="advancedMetadataConfigurationForm">
 
                     <ul data-role="listview" class="ulForm">
                         <li>
-                            <label for="txtMetadataPath">${LabelMetadataPath}</label>
-                            <div style="display: inline-block; width: 92%;">
-                                <input type="text" id="txtMetadataPath" />
-                            </div>
-                            <button id="btnSelectMetadataPath" type="button" data-icon="search" data-iconpos="notext" data-inline="true">${ButtonSelectDirectory}</button>
+                            <paper-input id="txtMetadataPath" label="${LabelMetadataPath}" style="width:85%;display:inline-block;"></paper-input>
+                            <paper-icon-button id="btnSelectMetadataPath" icon="search"></paper-icon-button>
                             <div class="fieldDescription">${LabelMetadataPathHelp}</div>
+                            <br />
                         </li>
                         <li>
                             <label for="chkSaveMetadataHidden">${OptionSaveMetadataAsHidden}</label>
@@ -64,29 +62,6 @@
                         <h2>${HeaderChapters}</h2>
                         <div>
                             <br />
-                            <div style="display: none;">
-                                <p>${HeaderChapterDownloadingHelp}</p>
-
-                                <div class="chapterDownloadSettings" style="display: none;">
-                                    <fieldset data-role="controlgroup">
-                                        <legend>${HeaderDownloadChaptersFor}</legend>
-                                        <input type="checkbox" id="chkDownloadChapterMovies" />
-                                        <label for="chkDownloadChapterMovies">${OptionMovies}</label>
-
-                                        <input type="checkbox" id="chkDownloadChapterEpisodes" />
-                                        <label for="chkDownloadChapterEpisodes">${OptionEpisodes}</label>
-                                    </fieldset>
-                                    <br />
-                                    <div class="chapterFetchers">
-                                    </div>
-                                    <br />
-                                    <br />
-                                </div>
-                                <div class="noChapterProviders" style="display: none; color: green;">
-                                    <p>${MessageNoChapterProviders}</p>
-                                    <br />
-                                </div>
-                            </div>
                             <ul data-role="listview" class="ulForm" style="margin-bottom:0!important;">
                                 <li>
                                     <label>${HeaderExtractChapterImagesFor}</label>
@@ -168,25 +143,32 @@
                         </div>
                     </div>
 
+                    <div data-role="collapsible">
+                        <h2>${HeaderVideos}</h2>
+                        <div>
+                            <div>
+                                <br />
+                                <paper-checkbox class="chkEnableVideoFrameAnalysis">${OptionEnableVideoFrameAnalysis}</paper-checkbox>
+                                <div class="fieldDescription paperCheckboxFieldDescription">${OptionEnableVideoFrameAnalysisHelp}</div>
+                            </div>
+                            <br />
+                        </div>
+                    </div>
+
                     <br /><br />
                     <ul data-role="listview" class="ulForm">
                         <li>
-                            <button type="submit" data-theme="b" data-icon="check" data-mini="true">
-                                ${ButtonSave}
+                            <button type="submit" data-role="none" class="clearButton">
+                                <paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>${ButtonSave}</span></paper-button>
                             </button>
-                            <button type="button" onclick="Dashboard.navigate('dashboard.html');" data-icon="delete" data-mini="true">
-                                ${ButtonCancel}
-                            </button>
+
+                            <paper-button raised class="cancel block btnCancel" onclick="history.back();"><iron-icon icon="close"></iron-icon><span>${ButtonCancel}</span></paper-button>
                         </li>
                     </ul>
                 </form>
             </div>
 
         </div>
-
-        <script type="text/javascript">
-            $('#advancedMetadataConfigurationForm').on('submit', AdvancedMetadataConfigurationPage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

@@ -7,15 +7,18 @@ using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Serialization;
 using ServiceStack;
 using System;
 using System.IO;
+using CommonIO;
 
 namespace MediaBrowser.Api.Playback.Progressive
 {
     /// <summary>
-    /// Class GetAudioStream
+    /// Class GetVideoStream
     /// </summary>
+    [Route("/Videos/{Id}/stream.mpegts", "GET")]
     [Route("/Videos/{Id}/stream.ts", "GET")]
     [Route("/Videos/{Id}/stream.webm", "GET")]
     [Route("/Videos/{Id}/stream.asf", "GET")]
@@ -61,7 +64,7 @@ namespace MediaBrowser.Api.Playback.Progressive
     /// </summary>
     public class VideoService : BaseProgressiveStreamingService
     {
-        public VideoService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, IImageProcessor imageProcessor, IHttpClient httpClient) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient, imageProcessor, httpClient)
+        public VideoService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, IJsonSerializer jsonSerializer, IImageProcessor imageProcessor, IHttpClient httpClient) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient, jsonSerializer, imageProcessor, httpClient)
         {
         }
 
@@ -88,7 +91,7 @@ namespace MediaBrowser.Api.Playback.Progressive
         protected override string GetCommandLineArguments(string outputPath, StreamState state, bool isEncoding)
         {
             // Get the output codec name
-            var videoCodec = state.OutputVideoCodec;
+            var videoCodec = GetVideoEncoder(state);
 
             var format = string.Empty;
             var keyFrame = string.Empty;
@@ -182,11 +185,11 @@ namespace MediaBrowser.Api.Playback.Progressive
             }
 
             // Get the output codec name
-            var codec = state.OutputAudioCodec;
+            var codec = GetAudioEncoder(state);
 
             var args = "-codec:a:0 " + codec;
 
-            if (codec.Equals("copy", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(codec, "copy", StringComparison.OrdinalIgnoreCase))
             {
                 return args;
             }

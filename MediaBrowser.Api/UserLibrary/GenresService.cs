@@ -1,11 +1,10 @@
 ﻿using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Querying;
+using MediaBrowser.Model.Entities;
 using ServiceStack;
 using System;
 using System.Collections.Generic;
@@ -39,7 +38,7 @@ namespace MediaBrowser.Api.UserLibrary
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
     }
 
     /// <summary>
@@ -76,9 +75,9 @@ namespace MediaBrowser.Api.UserLibrary
 
             var dtoOptions = GetDtoOptions(request);
 
-            if (request.UserId.HasValue)
+            if (!string.IsNullOrWhiteSpace(request.UserId))
             {
-                var user = UserManager.GetUserById(request.UserId.Value);
+                var user = UserManager.GetUserById(request.UserId);
 
                 return DtoService.GetBaseItemDto(item, dtoOptions, user);
             }
@@ -104,8 +103,38 @@ namespace MediaBrowser.Api.UserLibrary
         /// <param name="request">The request.</param>
         /// <param name="items">The items.</param>
         /// <returns>IEnumerable{Tuple{System.StringFunc{System.Int32}}}.</returns>
-        protected override IEnumerable<Genre> GetAllItems(GetItemsByName request, IEnumerable<BaseItem> items)
+        protected override IEnumerable<BaseItem> GetAllItems(GetItemsByName request, IEnumerable<BaseItem> items)
         {
+            var viewType = GetParentItemViewType(request);
+
+            if (string.Equals(viewType, CollectionType.Music) || string.Equals(viewType, CollectionType.MusicVideos))
+            {
+                return items
+                    .SelectMany(i => i.Genres)
+                    .DistinctNames()
+                    .Select(name => LibraryManager.GetMusicGenre(name));
+            }
+
+            if (string.Equals(viewType, CollectionType.Games))
+            {
+                return items
+                    .SelectMany(i => i.Genres)
+                    .DistinctNames()
+                    .Select(name =>
+                    {
+                        try
+                        {
+                            return LibraryManager.GetGameGenre(name);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorException("Error getting genre {0}", ex, name);
+                            return null;
+                        }
+                    })
+                    .Where(i => i != null);
+            }
+
             return items
                 .SelectMany(i => i.Genres)
                 .DistinctNames()

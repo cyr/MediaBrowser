@@ -26,14 +26,7 @@ namespace MediaBrowser.Dlna.Profiles
                 }
             };
 
-            XmlRootAttributes = new[]
-            {
-                new XmlAttribute
-                {
-                    Name = "xmlns:av",
-                    Value = "urn:schemas-sony-com:av"
-                }
-            };
+            AddXmlRootAttribute("xmlns:av", "urn:schemas-sony-com:av");
 
             AlbumArtPn = "JPEG_TN";
 
@@ -44,6 +37,7 @@ namespace MediaBrowser.Dlna.Profiles
             ManufacturerUrl = "http://www.microsoft.com/";
             SonyAggregationFlags = "10";
             EnableSingleAlbumArtLimit = true;
+            EnableAlbumArtInDidl = true;
 
             TranscodingProfiles = new[]
             {
@@ -57,7 +51,7 @@ namespace MediaBrowser.Dlna.Profiles
                 {
                     Container = "ts",
                     VideoCodec = "h264",
-                    AudioCodec = "ac3,aac",
+                    AudioCodec = "ac3",
                     Type = DlnaProfileType.Video,
                     EnableMpegtsM2TsMode = true
                 },
@@ -250,6 +244,12 @@ namespace MediaBrowser.Dlna.Profiles
                             Condition = ProfileConditionType.LessThanEqual,
                             Property = ProfileConditionValue.Height,
                             Value = "1080"
+                        },
+                        new ProfileCondition
+                        {
+                            Condition = ProfileConditionType.LessThanEqual,
+                            Property = ProfileConditionValue.VideoFramerate,
+                            Value = "30"
                         }
                     }
                 },
@@ -266,6 +266,22 @@ namespace MediaBrowser.Dlna.Profiles
                             Condition = ProfileConditionType.LessThanEqual,
                             Property = ProfileConditionValue.AudioChannels,
                             Value = "6"
+                        }
+                    }
+                },
+
+                new CodecProfile
+                {
+                    Type = CodecType.VideoAudio,
+                    Codec = "mp3,mp2",
+
+                    Conditions = new []
+                    {
+                        new ProfileCondition
+                        {
+                            Condition = ProfileConditionType.LessThanEqual,
+                            Property = ProfileConditionValue.AudioChannels,
+                            Value = "2"
                         }
                     }
                 }

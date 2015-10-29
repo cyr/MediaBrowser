@@ -4,15 +4,18 @@ using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Dlna;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Net;
+using MediaBrowser.Model.Serialization;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Api.Playback.Hls
 {
@@ -21,7 +24,8 @@ namespace MediaBrowser.Api.Playback.Hls
     /// </summary>
     public abstract class BaseHlsService : BaseStreamingService
     {
-        protected BaseHlsService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient)
+        protected BaseHlsService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, IJsonSerializer jsonSerializer)
+            : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient, jsonSerializer)
         {
         }
 
@@ -88,17 +92,18 @@ namespace MediaBrowser.Api.Playback.Hls
             TranscodingJob job = null;
             var playlist = state.OutputFilePath;
 
-            if (!File.Exists(playlist))
+            if (!FileSystem.FileExists(playlist))
             {
                 await ApiEntryPoint.Instance.TranscodingStartLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(false);
                 try
                 {
-                    if (!File.Exists(playlist))
+                    if (!FileSystem.FileExists(playlist))
                     {
                         // If the playlist doesn't already exist, startup ffmpeg
                         try
                         {
                             job = await StartFfMpeg(state, playlist, cancellationTokenSource).ConfigureAwait(false);
+                            job.IsLiveOutput = isLive;
                         }
                         catch
                         {
@@ -132,7 +137,7 @@ namespace MediaBrowser.Api.Playback.Hls
             var appendBaselineStream = false;
             var baselineStreamBitrate = 64000;
 
-            var hlsVideoRequest = state.VideoRequest as GetHlsVideoStream;
+            var hlsVideoRequest = state.VideoRequest as GetHlsVideoStreamLegacy;
             if (hlsVideoRequest != null)
             {
                 appendBaselineStream = hlsVideoRequest.AppendBaselineStream;
@@ -147,7 +152,7 @@ namespace MediaBrowser.Api.Playback.Hls
             {
                 ApiEntryPoint.Instance.OnTranscodeEndRequest(job);
             }
-            
+
             return ResultFactory.GetResult(playlistText, MimeTypes.GetMimeType("playlist.m3u8"), new Dictionary<string, string>());
         }
 
@@ -243,7 +248,7 @@ namespace MediaBrowser.Api.Playback.Hls
 
         protected override string GetCommandLineArguments(string outputPath, StreamState state, bool isEncoding)
         {
-            var hlsVideoRequest = state.VideoRequest as GetHlsVideoStream;
+            var hlsVideoRequest = state.VideoRequest as GetHlsVideoStreamLegacy;
 
             var itsOffsetMs = hlsVideoRequest == null
                                        ? 0
@@ -307,6 +312,11 @@ namespace MediaBrowser.Api.Playback.Hls
         protected virtual int GetStartNumber(StreamState state)
         {
             return 0;
+        }
+
+        protected override bool CanStreamCopyAudio(VideoStreamRequest request, MediaStream audioStream, List<string> supportedAudioCodecs)
+        {
+            return false;
         }
     }
 }

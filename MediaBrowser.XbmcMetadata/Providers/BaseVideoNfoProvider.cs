@@ -2,12 +2,13 @@
 using MediaBrowser.Common.IO;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.XbmcMetadata.Parsers;
-using System.Collections.Generic;
+using MediaBrowser.XbmcMetadata.Savers;
 using System.IO;
+using System.Linq;
 using System.Threading;
+using CommonIO;
 
 namespace MediaBrowser.XbmcMetadata.Providers
 {
@@ -24,32 +25,28 @@ namespace MediaBrowser.XbmcMetadata.Providers
             _config = config;
         }
 
-        protected override void Fetch(LocalMetadataResult<T> result, string path, CancellationToken cancellationToken)
+        protected override void Fetch(MetadataResult<T> result, string path, CancellationToken cancellationToken)
         {
-            var chapters = new List<ChapterInfo>();
-
-            new MovieNfoParser(_logger, _config).Fetch(result.Item, result.UserDataLIst, chapters, path, cancellationToken);
-
-            result.Chapters = chapters;
-        }
-
-        protected override FileSystemInfo GetXmlFile(ItemInfo info, IDirectoryService directoryService)
-        {
-            var path = GetMovieSavePath(info, FileSystem);
-
-            return directoryService.GetFile(path);
-        }
-
-        public static string GetMovieSavePath(ItemInfo item, IFileSystem fileSystem)
-        {
-            if (Directory.Exists(item.Path))
+            var tmpItem = new MetadataResult<Video>
             {
-                var path = item.Path;
+                Item = result.Item
+            };
+            new MovieNfoParser(_logger, _config).Fetch(tmpItem, path, cancellationToken);
 
-                return Path.Combine(path, Path.GetFileName(path) + ".nfo");
+            result.Item = (T)tmpItem.Item;
+            result.People = tmpItem.People;
+
+            if (tmpItem.UserDataList != null)
+            {
+                result.UserDataList = tmpItem.UserDataList;
             }
+        }
 
-            return Path.ChangeExtension(item.Path, ".nfo");
+        protected override FileSystemMetadata GetXmlFile(ItemInfo info, IDirectoryService directoryService)
+        {
+            return MovieNfoSaver.GetMovieSavePaths(info, FileSystem)
+                .Select(directoryService.GetFile)
+                .FirstOrDefault(i => i != null);
         }
     }
 }

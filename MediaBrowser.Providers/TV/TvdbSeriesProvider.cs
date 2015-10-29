@@ -22,10 +22,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using CommonIO;
 
 namespace MediaBrowser.Providers.TV
 {
-    public class TvdbSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IItemIdentityProvider<SeriesInfo, SeriesIdentity>, IHasOrder
+    public class TvdbSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IItemIdentityProvider<SeriesInfo>, IHasOrder
     {
         private const string TvdbSeriesOffset = "TvdbSeriesOffset";
         private const string TvdbSeriesOffsetFormat = "{0}-{1}";
@@ -58,70 +59,48 @@ namespace MediaBrowser.Providers.TV
 
         public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo searchInfo, CancellationToken cancellationToken)
         {
-            var seriesId = searchInfo.GetProviderId(MetadataProviders.Tvdb);
-
-            if (string.IsNullOrWhiteSpace(seriesId))
+            if (IsValidSeries(searchInfo.ProviderIds))
             {
-                return await FindSeries(searchInfo.Name, searchInfo.MetadataLanguage, cancellationToken).ConfigureAwait(false);
-            }
+                var metadata = await GetMetadata(searchInfo, cancellationToken).ConfigureAwait(false);
 
-            var metadata = await GetMetadata(searchInfo, cancellationToken).ConfigureAwait(false);
-
-            var list = new List<RemoteSearchResult>();
-
-            if (metadata.HasMetadata)
-            {
-                var res = new RemoteSearchResult
+                if (metadata.HasMetadata)
                 {
-                    Name = metadata.Item.Name,
-                    PremiereDate = metadata.Item.PremiereDate,
-                    ProductionYear = metadata.Item.ProductionYear,
-                    ProviderIds = metadata.Item.ProviderIds,
-                    SearchProviderName = Name
-                };
-
-                list.Add(res);
+                    return new List<RemoteSearchResult>
+                    {
+                        new RemoteSearchResult
+                        {
+                            Name = metadata.Item.Name,
+                            PremiereDate = metadata.Item.PremiereDate,
+                            ProductionYear = metadata.Item.ProductionYear,
+                            ProviderIds = metadata.Item.ProviderIds,
+                            SearchProviderName = Name
+                        }
+                    };
+                }
             }
 
-            return list;
+            return await FindSeries(searchInfo.Name, searchInfo.Year, searchInfo.MetadataLanguage, cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<MetadataResult<Series>> GetMetadata(SeriesInfo itemId, CancellationToken cancellationToken)
         {
             var result = new MetadataResult<Series>();
 
-            var seriesId = itemId.GetProviderId(MetadataProviders.Tvdb);
-
-            if (string.IsNullOrWhiteSpace(seriesId))
+            if (!IsValidSeries(itemId.ProviderIds))
             {
-                seriesId = itemId.Identities
-                                 .Where(id => id.Type == MetadataProviders.Tvdb.ToString())
-                                 .Select(id => id.Id)
-                                 .FirstOrDefault();
-
-                if (string.IsNullOrWhiteSpace(seriesId))
-                {
-                    var srch = await GetSearchResults(itemId, cancellationToken).ConfigureAwait(false);
-
-                    var entry = srch.FirstOrDefault();
-
-                    if (entry != null)
-                    {
-                        seriesId = entry.GetProviderId(MetadataProviders.Tvdb);
-                    }
-                }
+                await Identify(itemId).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!string.IsNullOrWhiteSpace(seriesId))
+            if (IsValidSeries(itemId.ProviderIds))
             {
-                await EnsureSeriesInfo(seriesId, itemId.MetadataLanguage, cancellationToken).ConfigureAwait(false);
+                await EnsureSeriesInfo(itemId.ProviderIds, itemId.MetadataLanguage, cancellationToken).ConfigureAwait(false);
 
                 result.Item = new Series();
                 result.HasMetadata = true;
 
-                FetchSeriesData(result.Item, seriesId, cancellationToken);
+                FetchSeriesData(result, itemId.GetProviderId(MetadataProviders.Tvdb), cancellationToken);
                 await FindAnimeSeriesIndex(result.Item, itemId).ConfigureAwait(false);
             }
 
@@ -159,12 +138,14 @@ namespace MediaBrowser.Providers.TV
         /// <summary>
         /// Fetches the series data.
         /// </summary>
-        /// <param name="series">The series.</param>
+        /// <param name="result">The result.</param>
         /// <param name="seriesId">The series id.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{System.Boolean}.</returns>
-        private void FetchSeriesData(Series series, string seriesId, CancellationToken cancellationToken)
+        private void FetchSeriesData(MetadataResult<Series> result, string seriesId, CancellationToken cancellationToken)
         {
+            var series = result.Item;
+
             series.SetProviderId(MetadataProviders.Tvdb, seriesId);
 
             var seriesDataPath = GetSeriesDataPath(_config.ApplicationPaths, seriesId);
@@ -178,7 +159,9 @@ namespace MediaBrowser.Providers.TV
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            FetchActors(series, actorsXmlPath);
+            result.ResetPeople();
+
+            FetchActors(result, actorsXmlPath);
         }
 
         /// <summary>
@@ -248,7 +231,7 @@ namespace MediaBrowser.Providers.TV
 
             if (!string.Equals(downloadLangaugeXmlFile, saveAsLanguageXmlFile, StringComparison.OrdinalIgnoreCase))
             {
-                File.Copy(downloadLangaugeXmlFile, saveAsLanguageXmlFile, true);
+                _fileSystem.CopyFile(downloadLangaugeXmlFile, saveAsLanguageXmlFile, true);
             }
 
             await ExtractEpisodes(seriesDataPath, downloadLangaugeXmlFile, lastTvDbUpdateTime).ConfigureAwait(false);
@@ -259,62 +242,94 @@ namespace MediaBrowser.Providers.TV
             return _config.GetConfiguration<TvdbOptions>("tvdb");
         }
 
-        private readonly Task _cachedTask = Task.FromResult(true);
-        internal Task EnsureSeriesInfo(string seriesId, string preferredMetadataLanguage, CancellationToken cancellationToken)
+        internal static bool IsValidSeries(Dictionary<string, string> seriesProviderIds)
         {
-            var seriesDataPath = GetSeriesDataPath(_config.ApplicationPaths, seriesId);
-
-            Directory.CreateDirectory(seriesDataPath);
-
-            var files = new DirectoryInfo(seriesDataPath).EnumerateFiles("*.xml", SearchOption.TopDirectoryOnly)
-                .ToList();
-
-            var seriesXmlFilename = preferredMetadataLanguage + ".xml";
-
-            var download = false;
-            var automaticUpdatesEnabled = GetTvDbOptions().EnableAutomaticUpdates;
-
-            const int cacheDays = 2;
-
-            var seriesFile = files.FirstOrDefault(i => string.Equals(seriesXmlFilename, i.Name, StringComparison.OrdinalIgnoreCase));
-            // No need to check age if automatic updates are enabled
-            if (seriesFile == null || !seriesFile.Exists || (!automaticUpdatesEnabled && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(seriesFile)).TotalDays > cacheDays))
+            string id;
+            if (seriesProviderIds.TryGetValue(MetadataProviders.Tvdb.ToString(), out id))
             {
-                download = true;
+                return true;
+            }
+            //if (seriesProviderIds.TryGetValue(MetadataProviders.Imdb.ToString(), out id))
+            //{
+            //    return true;
+            //}
+            return false;
+        }
+
+        internal async Task<string> EnsureSeriesInfo(Dictionary<string,string> seriesProviderIds, string preferredMetadataLanguage, CancellationToken cancellationToken)
+        {
+            string seriesId;
+            if (seriesProviderIds.TryGetValue(MetadataProviders.Tvdb.ToString(), out seriesId))
+            {
+                var seriesDataPath = GetSeriesDataPath(_config.ApplicationPaths, seriesId);
+
+                // Only download if not already there
+                // The post-scan task will take care of updates so we don't need to re-download here
+                if (!IsCacheValid(seriesDataPath, preferredMetadataLanguage))
+                {
+                    await DownloadSeriesZip(seriesId, seriesDataPath, null, preferredMetadataLanguage, cancellationToken).ConfigureAwait(false);
+                }
+
+                return seriesDataPath;
             }
 
-            var actorsXml = files.FirstOrDefault(i => string.Equals("actors.xml", i.Name, StringComparison.OrdinalIgnoreCase));
-            // No need to check age if automatic updates are enabled
-            if (actorsXml == null || !actorsXml.Exists || (!automaticUpdatesEnabled && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(actorsXml)).TotalDays > cacheDays))
-            {
-                download = true;
-            }
+            return null;
+        }
 
-            var bannersXml = files.FirstOrDefault(i => string.Equals("banners.xml", i.Name, StringComparison.OrdinalIgnoreCase));
-            // No need to check age if automatic updates are enabled
-            if (bannersXml == null || !bannersXml.Exists || (!automaticUpdatesEnabled && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(bannersXml)).TotalDays > cacheDays))
+        private bool IsCacheValid(string seriesDataPath, string preferredMetadataLanguage)
+        {
+            try
             {
-                download = true;
-            }
+                var files = _fileSystem.GetFiles(seriesDataPath)
+                    .ToList();
 
-            // Only download if not already there
-            // The post-scan task will take care of updates so we don't need to re-download here
-            if (download)
+                var seriesXmlFilename = preferredMetadataLanguage + ".xml";
+
+                var automaticUpdatesEnabled = GetTvDbOptions().EnableAutomaticUpdates;
+
+                const int cacheDays = 2;
+
+                var seriesFile = files.FirstOrDefault(i => string.Equals(seriesXmlFilename, i.Name, StringComparison.OrdinalIgnoreCase));
+                // No need to check age if automatic updates are enabled
+                if (seriesFile == null || !seriesFile.Exists || (!automaticUpdatesEnabled && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(seriesFile)).TotalDays > cacheDays))
+                {
+                    return false;
+                }
+
+                var actorsXml = files.FirstOrDefault(i => string.Equals("actors.xml", i.Name, StringComparison.OrdinalIgnoreCase));
+                // No need to check age if automatic updates are enabled
+                if (actorsXml == null || !actorsXml.Exists || (!automaticUpdatesEnabled && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(actorsXml)).TotalDays > cacheDays))
+                {
+                    return false;
+                }
+
+                var bannersXml = files.FirstOrDefault(i => string.Equals("banners.xml", i.Name, StringComparison.OrdinalIgnoreCase));
+                // No need to check age if automatic updates are enabled
+                if (bannersXml == null || !bannersXml.Exists || (!automaticUpdatesEnabled && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(bannersXml)).TotalDays > cacheDays))
+                {
+                    return false;
+                }
+                return true;
+            }
+            catch (DirectoryNotFoundException)
             {
-                return DownloadSeriesZip(seriesId, seriesDataPath, null, preferredMetadataLanguage, cancellationToken);
+                return false;
             }
-
-            return _cachedTask;
+            catch (FileNotFoundException)
+            {
+                return false;
+            }
         }
 
         /// <summary>
         /// Finds the series.
         /// </summary>
         /// <param name="name">The name.</param>
+        /// <param name="year">The year.</param>
         /// <param name="language">The language.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{System.String}.</returns>
-        private async Task<IEnumerable<RemoteSearchResult>> FindSeries(string name, string language, CancellationToken cancellationToken)
+        private async Task<IEnumerable<RemoteSearchResult>> FindSeries(string name, int? year, string language, CancellationToken cancellationToken)
         {
             var results = (await FindSeriesInternal(name, language, cancellationToken).ConfigureAwait(false)).ToList();
 
@@ -329,7 +344,16 @@ namespace MediaBrowser.Providers.TV
                 }
             }
 
-            return results;
+            return results.Where(i =>
+            {
+                if (year.HasValue && i.ProductionYear.HasValue)
+                {
+                    // Allow one year tolerance
+                    return Math.Abs(year.Value - i.ProductionYear.Value) <= 1;
+                }
+
+                return true;
+            });
         }
 
         private async Task<IEnumerable<RemoteSearchResult>> FindSeriesInternal(string name, string language, CancellationToken cancellationToken)
@@ -398,28 +422,46 @@ namespace MediaBrowser.Providers.TV
                             }
                         }
 
-                        if (titles.Any(t => string.Equals(t, comparableName, StringComparison.OrdinalIgnoreCase)))
+                        var airDateNode = node.SelectSingleNode("./FirstAired");
+                        if (airDateNode != null)
                         {
-                            var id = node.SelectSingleNode("./seriesid") ??
-                                node.SelectSingleNode("./id");
-
-                            if (id != null)
+                            var val = airDateNode.InnerText;
+                            if (!string.IsNullOrWhiteSpace(val))
                             {
-                                searchResult.Name = titles.FirstOrDefault();
-                                searchResult.SetProviderId(MetadataProviders.Tvdb, id.InnerText);
-                                searchResults.Add(searchResult);
+                                DateTime date;
+                                if (DateTime.TryParse(val, out date))
+                                {
+                                    searchResult.ProductionYear = date.Year;
+                                }
                             }
                         }
 
                         foreach (var title in titles)
                         {
+                            if (string.Equals(title, comparableName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                var id = node.SelectSingleNode("./seriesid") ??
+                                    node.SelectSingleNode("./id");
+
+                                if (id != null)
+                                {
+                                    searchResult.Name = title;
+                                    searchResult.SetProviderId(MetadataProviders.Tvdb, id.InnerText);
+                                    searchResults.Add(searchResult);
+                                }
+                                break;
+                            }
                             _logger.Info("TVDb Provider - " + title + " did not match " + comparableName);
                         }
                     }
                 }
             }
 
-            _logger.Info("TVDb Provider - Could not find " + name + ". Check name on Thetvdb.org.");
+            if (searchResults.Count == 0)
+            {
+                _logger.Info("TVDb Provider - Could not find " + name + ". Check name on Thetvdb.org.");
+            }
+
             return searchResults;
         }
 
@@ -614,9 +656,9 @@ namespace MediaBrowser.Providers.TV
         /// <summary>
         /// Fetches the actors.
         /// </summary>
-        /// <param name="series">The series.</param>
+        /// <param name="result">The result.</param>
         /// <param name="actorsXmlPath">The actors XML path.</param>
-        private void FetchActors(Series series, string actorsXmlPath)
+        private void FetchActors(MetadataResult<Series> result, string actorsXmlPath)
         {
             var settings = new XmlReaderSettings
             {
@@ -644,7 +686,7 @@ namespace MediaBrowser.Providers.TV
                                     {
                                         using (var subtree = reader.ReadSubtree())
                                         {
-                                            FetchDataFromActorNode(series, subtree);
+                                            FetchDataFromActorNode(result, subtree);
                                         }
                                         break;
                                     }
@@ -661,9 +703,9 @@ namespace MediaBrowser.Providers.TV
         /// <summary>
         /// Fetches the data from actor node.
         /// </summary>
-        /// <param name="series">The series.</param>
+        /// <param name="result">The result.</param>
         /// <param name="reader">The reader.</param>
-        private void FetchDataFromActorNode(Series series, XmlReader reader)
+        private void FetchDataFromActorNode(MetadataResult<Series> result, XmlReader reader)
         {
             reader.MoveToContent();
 
@@ -715,7 +757,7 @@ namespace MediaBrowser.Providers.TV
 
             if (!string.IsNullOrWhiteSpace(personInfo.Name))
             {
-                series.AddPerson(personInfo);
+                result.AddPerson(personInfo);
             }
         }
 
@@ -1099,7 +1141,7 @@ namespace MediaBrowser.Providers.TV
             var file = Path.Combine(seriesDataPath, string.Format("episode-{0}-{1}.xml", seasonNumber, episodeNumber));
 
             // Only save the file if not already there, or if the episode has changed
-            if (hasEpisodeChanged || !File.Exists(file))
+            if (hasEpisodeChanged || !_fileSystem.FileExists(file))
             {
                 using (var writer = XmlWriter.Create(file, new XmlWriterSettings
                 {
@@ -1116,7 +1158,7 @@ namespace MediaBrowser.Providers.TV
                 file = Path.Combine(seriesDataPath, string.Format("episode-abs-{0}.xml", absoluteNumber));
 
                 // Only save the file if not already there, or if the episode has changed
-                if (hasEpisodeChanged || !File.Exists(file))
+                if (hasEpisodeChanged || !_fileSystem.FileExists(file))
                 {
                     using (var writer = XmlWriter.Create(file, new XmlWriterSettings
                     {
@@ -1159,11 +1201,10 @@ namespace MediaBrowser.Providers.TV
         {
             try
             {
-                foreach (var file in new DirectoryInfo(path)
-                    .EnumerateFiles("*.xml", SearchOption.AllDirectories)
+                foreach (var file in _fileSystem.GetFilePaths(path, true)
                     .ToList())
                 {
-                    _fileSystem.DeleteFile(file.FullName);
+                    _fileSystem.DeleteFile(file);
                 }
             }
             catch (DirectoryNotFoundException)
@@ -1232,27 +1273,22 @@ namespace MediaBrowser.Providers.TV
             get { return "TheTVDB"; }
         }
 
-        public async Task<SeriesIdentity> FindIdentity(SeriesInfo info)
+        public async Task Identify(SeriesInfo info)
         {
-            string tvdbId;
-            if (!info.ProviderIds.TryGetValue(MetadataProviders.Tvdb.ToString(), out tvdbId))
+            if (!string.IsNullOrWhiteSpace(info.GetProviderId(MetadataProviders.Tvdb)))
             {
-                var srch = await GetSearchResults(info, CancellationToken.None).ConfigureAwait(false);
-
-                var entry = srch.FirstOrDefault();
-
-                if (entry != null)
-                {
-                    tvdbId = entry.GetProviderId(MetadataProviders.Tvdb);
-                }
+                return;
             }
 
-            if (!string.IsNullOrWhiteSpace(tvdbId))
-            {
-                return new SeriesIdentity { Type = MetadataProviders.Tvdb.ToString(), Id = tvdbId };
-            }
+            var srch = await FindSeries(info.Name, info.Year, info.MetadataLanguage, CancellationToken.None).ConfigureAwait(false);
 
-            return null;
+            var entry = srch.FirstOrDefault();
+
+            if (entry != null)
+            {
+                var id = entry.GetProviderId(MetadataProviders.Tvdb);
+                info.SetProviderId(MetadataProviders.Tvdb, id);
+            }
         }
 
         public int Order

@@ -17,7 +17,7 @@
 
                 callback: function () {
 
-                    window.location = 'login.html';
+                    window.location.href = 'login.html';
                 }
             });
             return;
@@ -31,7 +31,9 @@
         return;
     }
 
-    function onSubmit(page) {
+    function onSubmit() {
+
+        var page = $(this).parents('.page');
 
         ApiClient.ajax({
 
@@ -46,18 +48,14 @@
 
             processForgotPasswordResult(page, result);
         });
+        return false;
     }
 
-    window.ForgotPasswordPinPage = {
+    $(document).on('pageinit', '.forgotPasswordPinPage', function () {
 
-        onSubmit: function () {
+        var page = this;
 
-            var page = $(this).parents('.page');
-
-            onSubmit(page);
-            return false;
-        }
-
-    };
+        $('form', page).off('submit', onSubmit).on('submit', onSubmit);
+    });
 
 })(window);

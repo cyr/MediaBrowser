@@ -5,7 +5,6 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Localization;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Dlna.Didl;
-using MediaBrowser.Dlna.Ssdp;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
@@ -35,7 +34,7 @@ namespace MediaBrowser.Dlna.PlayTo
         private readonly ILocalizationManager _localization;
         private readonly IMediaSourceManager _mediaSourceManager;
 
-        private readonly DeviceDiscovery _deviceDiscovery;
+        private readonly IDeviceDiscovery _deviceDiscovery;
         private readonly string _serverAddress;
         private readonly string _accessToken;
 
@@ -58,7 +57,7 @@ namespace MediaBrowser.Dlna.PlayTo
 
         private Timer _updateTimer;
 
-        public PlayToController(SessionInfo session, ISessionManager sessionManager, ILibraryManager libraryManager, ILogger logger, IDlnaManager dlnaManager, IUserManager userManager, IImageProcessor imageProcessor, string serverAddress, string accessToken, DeviceDiscovery deviceDiscovery, IUserDataManager userDataManager, ILocalizationManager localization, IMediaSourceManager mediaSourceManager)
+        public PlayToController(SessionInfo session, ISessionManager sessionManager, ILibraryManager libraryManager, ILogger logger, IDlnaManager dlnaManager, IUserManager userManager, IImageProcessor imageProcessor, string serverAddress, string accessToken, IDeviceDiscovery deviceDiscovery, IUserDataManager userDataManager, ILocalizationManager localization, IMediaSourceManager mediaSourceManager)
         {
             _session = session;
             _sessionManager = sessionManager;
@@ -265,7 +264,7 @@ namespace MediaBrowser.Dlna.PlayTo
         {
             var ticks = _device.Position.Ticks;
 
-            if (!info.IsDirectStream)
+            if (!EnableClientSideSeek(info))
             {
                 ticks += info.StartPositionTicks;
             }
@@ -376,21 +375,26 @@ namespace MediaBrowser.Dlna.PlayTo
             {
                 var info = StreamParams.ParseFromUrl(media.Url, _libraryManager, _mediaSourceManager);
 
-                if (info.Item != null && !info.IsDirectStream)
+                if (info.Item != null && !EnableClientSideSeek(info))
                 {
                     var user = _session.UserId.HasValue ? _userManager.GetUserById(_session.UserId.Value) : null;
                     var newItem = CreatePlaylistItem(info.Item, user, newPosition, info.MediaSourceId, info.AudioStreamIndex, info.SubtitleStreamIndex);
 
                     await _device.SetAvTransport(newItem.StreamUrl, GetDlnaHeaders(newItem), newItem.Didl).ConfigureAwait(false);
-
-                    if (newItem.StreamInfo.IsDirectStream)
-                    {
-                        await _device.Seek(TimeSpan.FromTicks(newPosition)).ConfigureAwait(false);
-                    }
                     return;
                 }
-                await _device.Seek(TimeSpan.FromTicks(newPosition)).ConfigureAwait(false);
+                await SeekAfterTransportChange(newPosition).ConfigureAwait(false);
             }
+        }
+
+        private bool EnableClientSideSeek(StreamParams info)
+        {
+            return info.IsDirectStream;
+        }
+
+        private bool EnableClientSideSeek(StreamInfo info)
+        {
+            return info.IsDirectStream;
         }
 
         public Task SendUserDataChangeInfo(UserDataChangeInfo info, CancellationToken cancellationToken)
@@ -473,7 +477,7 @@ namespace MediaBrowser.Dlna.PlayTo
 
             playlistItem.StreamUrl = playlistItem.StreamInfo.ToDlnaUrl(_serverAddress, _accessToken);
 
-            var itemXml = new DidlBuilder(profile, user, _imageProcessor, _serverAddress, _accessToken, _userDataManager, _localization, _mediaSourceManager, _logger)
+            var itemXml = new DidlBuilder(profile, user, _imageProcessor, _serverAddress, _accessToken, _userDataManager, _localization, _mediaSourceManager, _logger, _libraryManager)
                 .GetItemDidl(item, null, _session.DeviceId, new Filter(), playlistItem.StreamInfo);
 
             playlistItem.Didl = itemXml;
@@ -509,8 +513,6 @@ namespace MediaBrowser.Dlna.PlayTo
                     streamInfo.TargetHeight,
                     streamInfo.TargetVideoBitDepth,
                     streamInfo.TargetVideoBitrate,
-                    streamInfo.TargetAudioChannels,
-                    streamInfo.TargetAudioBitrate,
                     streamInfo.TargetTimestamp,
                     streamInfo.IsDirectStream,
                     streamInfo.RunTimeTicks,
@@ -523,7 +525,8 @@ namespace MediaBrowser.Dlna.PlayTo
                     streamInfo.IsTargetCabac,
                     streamInfo.TargetRefFrames,
                     streamInfo.TargetVideoStreamCount,
-                    streamInfo.TargetAudioStreamCount);
+                    streamInfo.TargetAudioStreamCount,
+                    streamInfo.TargetVideoCodecTag);
 
                 return list.FirstOrDefault();
             }
@@ -609,8 +612,10 @@ namespace MediaBrowser.Dlna.PlayTo
             await _device.SetAvTransport(currentitem.StreamUrl, GetDlnaHeaders(currentitem), currentitem.Didl);
 
             var streamInfo = currentitem.StreamInfo;
-            if (streamInfo.StartPositionTicks > 0 && streamInfo.IsDirectStream)
-                await _device.Seek(TimeSpan.FromTicks(streamInfo.StartPositionTicks));
+            if (streamInfo.StartPositionTicks > 0 && EnableClientSideSeek(streamInfo))
+            {
+                await SeekAfterTransportChange(streamInfo.StartPositionTicks).ConfigureAwait(false);
+            }
         }
 
         #endregion
@@ -744,9 +749,9 @@ namespace MediaBrowser.Dlna.PlayTo
 
                     await _device.SetAvTransport(newItem.StreamUrl, GetDlnaHeaders(newItem), newItem.Didl).ConfigureAwait(false);
 
-                    if (newItem.StreamInfo.IsDirectStream)
+                    if (EnableClientSideSeek(newItem.StreamInfo))
                     {
-                        await _device.Seek(TimeSpan.FromTicks(newPosition)).ConfigureAwait(false);
+                        await SeekAfterTransportChange(newPosition).ConfigureAwait(false);
                     }
                 }
             }
@@ -770,12 +775,26 @@ namespace MediaBrowser.Dlna.PlayTo
 
                     await _device.SetAvTransport(newItem.StreamUrl, GetDlnaHeaders(newItem), newItem.Didl).ConfigureAwait(false);
 
-                    if (newItem.StreamInfo.IsDirectStream)
+                    if (EnableClientSideSeek(newItem.StreamInfo) && newPosition > 0)
                     {
-                        await _device.Seek(TimeSpan.FromTicks(newPosition)).ConfigureAwait(false);
+                        await SeekAfterTransportChange(newPosition).ConfigureAwait(false);
                     }
                 }
             }
+        }
+
+        private async Task SeekAfterTransportChange(long positionTicks)
+        {
+            const int maxWait = 15000000;
+            const int interval = 500;
+            var currentWait = 0;
+            while (_device.TransportState != TRANSPORTSTATE.PLAYING && currentWait < maxWait)
+            {
+                await Task.Delay(interval).ConfigureAwait(false);
+                currentWait += interval;
+            }
+
+            await _device.Seek(TimeSpan.FromTicks(positionTicks)).ConfigureAwait(false);
         }
 
         private class StreamParams

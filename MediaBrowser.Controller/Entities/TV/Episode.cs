@@ -45,16 +45,6 @@ namespace MediaBrowser.Controller.Entities.TV
         /// <value>The index number.</value>
         public int? IndexNumberEnd { get; set; }
 
-        /// <summary>
-        /// We want to group into series not show individually in an index
-        /// </summary>
-        /// <value><c>true</c> if [group in index]; otherwise, <c>false</c>.</value>
-        [IgnoreDataMember]
-        public override bool GroupInIndex
-        {
-            get { return true; }
-        }
-
         [IgnoreDataMember]
         protected override bool SupportsOwnedItems
         {
@@ -88,19 +78,6 @@ namespace MediaBrowser.Controller.Entities.TV
                 var season = Season;
 
                 return season != null ? season.IndexNumber : null;
-            }
-        }
-
-        /// <summary>
-        /// We roll up into series
-        /// </summary>
-        /// <value>The index container.</value>
-        [IgnoreDataMember]
-        public override Folder IndexContainer
-        {
-            get
-            {
-                return Season;
             }
         }
 
@@ -173,7 +150,7 @@ namespace MediaBrowser.Controller.Entities.TV
                 {
                     var series = Series;
 
-                    if (ParentIndexNumber.HasValue)
+                    if (series != null && ParentIndexNumber.HasValue)
                     {
                         var findNumber = ParentIndexNumber.Value;
 
@@ -319,9 +296,16 @@ namespace MediaBrowser.Controller.Entities.TV
         {
             var hasChanges = base.BeforeMetadataRefresh();
 
-            if (LibraryManager.FillMissingEpisodeNumbersFromPath(this))
+            try
             {
-                hasChanges = true;
+                if (LibraryManager.FillMissingEpisodeNumbersFromPath(this))
+                {
+                    hasChanges = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.ErrorException("Error in FillMissingEpisodeNumbersFromPath. Episode: {0}", ex, Path ?? Name ?? Id.ToString());
             }
 
             return hasChanges;

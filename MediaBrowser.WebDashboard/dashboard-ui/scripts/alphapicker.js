@@ -35,34 +35,49 @@
         return html;
     }
 
-    $(document).on('pageinit', ".libraryPage", function () {
+    function init(container, picker) {
 
-        var page = this;
+        $('.itemsContainer', container).addClass('itemsContainerWithAlphaPicker');
 
-        var picker = $('.alphabetPicker', page);
+        picker.innerHTML = getPickerHtml();
 
-        if (!picker.length) {
-            return;
-        }
+        Events.on(picker, 'click', 'a', function () {
 
-        $('.itemsContainer', page).addClass('itemsContainerWithAlphaPicker');
+            var elem = this;
 
-        picker.html(getPickerHtml()).trigger('create').on('click', 'a', function () {
-
-            var elem = $(this);
-
-            var isSelected = elem.hasClass('selectedCharacter');
+            var isSelected = elem.classList.contains('selectedCharacter');
 
             $('.selectedCharacter', picker).removeClass('selectedCharacter');
 
             if (!isSelected) {
 
-                elem.addClass('selectedCharacter');
-                picker.trigger('alphaselect', [this.innerHTML]);
+                elem.classList.add('selectedCharacter');
+                Events.trigger(picker, 'alphaselect', [this.innerHTML]);
             } else {
-                picker.trigger('alphaclear');
+                Events.trigger(picker, 'alphaclear');
             }
         });
+    }
+
+    pageClassOn('pageinit', "libraryPage", function () {
+
+        var page = this;
+
+        var pickers = page.querySelectorAll('.alphabetPicker');
+
+        if (!pickers.length) {
+            return;
+        }
+
+        if (page.classList.contains('pageWithAbsoluteTabs')) {
+
+            for (var i = 0, length = pickers.length; i < length; i++) {
+                init($(pickers[i]).parents('.pageTabContent'), pickers[i]);
+            }
+
+        } else {
+            init(page, pickers[0]);
+        }
     });
 
     $.fn.alphaValue = function (val) {
@@ -79,10 +94,10 @@
 
             if (this.innerHTML.toLowerCase() == val) {
 
-                $(this).addClass('selectedCharacter');
+                this.classList.add('selectedCharacter');
 
             } else {
-                $(this).removeClass('selectedCharacter');
+                this.classList.remove('selectedCharacter');
             }
 
         });

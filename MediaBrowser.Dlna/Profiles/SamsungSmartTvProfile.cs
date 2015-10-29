@@ -27,14 +27,7 @@ namespace MediaBrowser.Dlna.Profiles
                 }
             };
 
-            XmlRootAttributes = new[]
-            {
-                new XmlAttribute
-                {
-                    Name = "xmlns:sec",
-                    Value = "http://www.sec.co.kr/"
-                }
-            };
+            AddXmlRootAttribute("xmlns:sec", "http://www.sec.co.kr/");
 
             TranscodingProfiles = new[]
            {
@@ -49,7 +42,8 @@ namespace MediaBrowser.Dlna.Profiles
                    Container = "ts",
                    AudioCodec = "ac3",
                    VideoCodec = "h264",
-                   Type = DlnaProfileType.Video
+                   Type = DlnaProfileType.Video,
+                   EstimateContentLength = true
                },
                new TranscodingProfile
                {

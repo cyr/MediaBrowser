@@ -4,7 +4,7 @@
     <title>${TitleNotifications}</title>
 </head>
 <body>
-    <div id="notificationSettingPage" data-role="page" class="page type-interior notificationConfigurationPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Notifications">
+    <div id="notificationSettingPage" data-role="page" class="page type-interior notificationConfigurationPage" data-helpurl="https://github.com/MediaBrowser/Wiki/wiki/Notifications" data-require="scripts/notificationsetting">
 
         <div data-role="content">
             <div class="content-primary">
@@ -72,12 +72,11 @@
                         </li>
                         <li>
                             <br />
-                            <button type="submit" data-theme="b" data-icon="check">
-                                ${ButtonSave}
+                            <button type="submit" data-role="none" class="clearButton">
+                                <paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>${ButtonSave}</span></paper-button>
                             </button>
-                            <button type="button" onclick="Dashboard.navigate('notificationsettings.html');" data-icon="delete">
-                                ${ButtonCancel}
-                            </button>
+
+                            <paper-button raised class="cancel block btnCancel" onclick="history.back();"><iron-icon icon="close"></iron-icon><span>${ButtonCancel}</span></paper-button>
                         </li>
 
                     </ul>
@@ -85,10 +84,6 @@
 
             </div>
         </div>
-
-        <script type="text/javascript">
-            $('.notificationSettingForm').off('submit', NotificationSettingPage.onSubmit).on('submit', NotificationSettingPage.onSubmit);
-        </script>
     </div>
 </body>
 </html>

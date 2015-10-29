@@ -15,6 +15,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Server.Implementations.Library
 {
@@ -24,17 +26,19 @@ namespace MediaBrowser.Server.Implementations.Library
         private readonly IUserManager _userManager;
         private readonly ILibraryManager _libraryManager;
         private readonly IJsonSerializer _jsonSerializer;
+        private readonly IFileSystem _fileSystem;
 
         private IMediaSourceProvider[] _providers;
         private readonly ILogger _logger;
 
-        public MediaSourceManager(IItemRepository itemRepo, IUserManager userManager, ILibraryManager libraryManager, ILogger logger, IJsonSerializer jsonSerializer)
+        public MediaSourceManager(IItemRepository itemRepo, IUserManager userManager, ILibraryManager libraryManager, ILogger logger, IJsonSerializer jsonSerializer, IFileSystem fileSystem)
         {
             _itemRepo = itemRepo;
             _userManager = userManager;
             _libraryManager = libraryManager;
             _logger = logger;
             _jsonSerializer = jsonSerializer;
+            _fileSystem = fileSystem;
         }
 
         public void AddParts(IEnumerable<IMediaSourceProvider> providers)
@@ -72,6 +76,12 @@ namespace MediaBrowser.Server.Implementations.Library
 
         private bool InternalTextStreamSupportsExternalStream(MediaStream stream)
         {
+            // These usually have styles and fonts that won't convert to text very well
+            if (string.Equals(stream.Codec, "ass", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             return true;
         }
 
@@ -95,6 +105,18 @@ namespace MediaBrowser.Server.Implementations.Library
             return GetMediaStreamsForItem(list);
         }
 
+        private int GetMaxAllowedBitrateForExternalSubtitleStream()
+        {
+            // This is abitrary but at some point it becomes too slow to extract subtitles on the fly
+            // We need to learn more about when this is the case vs. when it isn't
+            if (Environment.ProcessorCount >= 8)
+            {
+                return 10000000;
+            }
+
+            return 2000000;
+        }
+
         private IEnumerable<MediaStream> GetMediaStreamsForItem(IEnumerable<MediaStream> streams)
         {
             var list = streams.ToList();
@@ -107,9 +129,7 @@ namespace MediaBrowser.Server.Implementations.Library
             {
                 var videoStream = list.FirstOrDefault(i => i.Type == MediaStreamType.Video);
 
-                // This is abitrary but at some point it becomes too slow to extract subtitles on the fly
-                // We need to learn more about when this is the case vs. when it isn't
-                const int maxAllowedBitrateForExternalSubtitleStream = 10000000;
+                int maxAllowedBitrateForExternalSubtitleStream = GetMaxAllowedBitrateForExternalSubtitleStream();
 
                 var videoBitrate = videoStream == null ? maxAllowedBitrateForExternalSubtitleStream : videoStream.BitRate ?? maxAllowedBitrateForExternalSubtitleStream;
 
@@ -117,9 +137,12 @@ namespace MediaBrowser.Server.Implementations.Library
                 {
                     var supportsExternalStream = StreamSupportsExternalStream(subStream);
 
-                    if (supportsExternalStream && videoBitrate >= maxAllowedBitrateForExternalSubtitleStream)
+                    if (!subStream.IsExternal)
                     {
-                        supportsExternalStream = false;
+                        if (supportsExternalStream && videoBitrate >= maxAllowedBitrateForExternalSubtitleStream)
+                        {
+                            supportsExternalStream = false;
+                        }
                     }
 
                     subStream.SupportsExternalStream = supportsExternalStream;
@@ -157,7 +180,7 @@ namespace MediaBrowser.Server.Implementations.Library
                 if (source.Protocol == MediaProtocol.File)
                 {
                     // TODO: Path substitution
-                    if (!File.Exists(source.Path))
+                    if (!_fileSystem.FileExists(source.Path))
                     {
                         source.SupportsDirectStream = false;
                     }
@@ -230,7 +253,7 @@ namespace MediaBrowser.Server.Implementations.Library
 
         private void SetKeyProperties(IMediaSourceProvider provider, MediaSourceInfo mediaSource)
         {
-            var prefix = provider.GetType().FullName.GetMD5().ToString("N") + "|";
+            var prefix = provider.GetType().FullName.GetMD5().ToString("N") + LiveStreamIdDelimeter;
 
             if (!string.IsNullOrWhiteSpace(mediaSource.OpenToken) && !mediaSource.OpenToken.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
@@ -464,17 +487,28 @@ namespace MediaBrowser.Server.Implementations.Library
             }
         }
 
+        // Do not use a pipe here because Roku http requests to the server will fail, without any explicit error message.
+        private const char LiveStreamIdDelimeter = '_';
+
         private Tuple<IMediaSourceProvider, string> GetProvider(string key)
         {
-            var keys = key.Split(new[] { '|' }, 2);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new ArgumentException("key");
+            }
+
+            var keys = key.Split(new[] { LiveStreamIdDelimeter }, 2);
 
             var provider = _providers.FirstOrDefault(i => string.Equals(i.GetType().FullName.GetMD5().ToString("N"), keys[0], StringComparison.OrdinalIgnoreCase));
 
-            return new Tuple<IMediaSourceProvider, string>(provider, keys[1]);
+            var splitIndex = key.IndexOf(LiveStreamIdDelimeter);
+            var keyId = key.Substring(splitIndex + 1);
+
+            return new Tuple<IMediaSourceProvider, string>(provider, keyId);
         }
 
         private Timer _closeTimer;
-        private readonly TimeSpan _openStreamMaxAge = TimeSpan.FromSeconds(40);
+        private readonly TimeSpan _openStreamMaxAge = TimeSpan.FromSeconds(60);
 
         private void StartCloseTimer()
         {

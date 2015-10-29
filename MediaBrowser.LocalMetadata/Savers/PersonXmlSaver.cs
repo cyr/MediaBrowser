@@ -6,6 +6,8 @@ using System.IO;
 using System.Security;
 using System.Text;
 using System.Threading;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.LocalMetadata.Savers
 {
@@ -23,10 +25,14 @@ namespace MediaBrowser.LocalMetadata.Savers
         }
 
         private readonly IServerConfigurationManager _config;
+        private readonly ILibraryManager _libraryManager;
+        private readonly IFileSystem _fileSystem;
 
-        public PersonXmlSaver(IServerConfigurationManager config)
+        public PersonXmlSaver(IServerConfigurationManager config, ILibraryManager libraryManager, IFileSystem fileSystem)
         {
             _config = config;
+            _libraryManager = libraryManager;
+            _fileSystem = fileSystem;
         }
 
         /// <summary>
@@ -59,7 +65,7 @@ namespace MediaBrowser.LocalMetadata.Savers
 
             builder.Append("<Item>");
 
-            XmlSaverHelpers.AddCommonNodes(person, builder);
+            XmlSaverHelpers.AddCommonNodes(person, _libraryManager, builder);
 
             if (!string.IsNullOrEmpty(person.PlaceOfBirth))
             {
@@ -73,7 +79,7 @@ namespace MediaBrowser.LocalMetadata.Savers
             XmlSaverHelpers.Save(builder, xmlFilePath, new List<string>
                 {
                     "PlaceOfBirth"
-                }, _config);
+                }, _config, _fileSystem);
         }
 
         /// <summary>

@@ -41,16 +41,16 @@
 
             var mapHtml = '<tr>';
 
-            mapHtml += '<td>';
-            mapHtml += '<button class="btnDeletePath" data-index="' + index + '" data-mini="true" data-inline="true" data-icon="delete" data-iconpos="notext" type="button" style="margin:0 .5em 0 0;">Delete</button>';
-            mapHtml += '</td>';
-
             mapHtml += '<td style="vertical-align:middle;">';
             mapHtml += map.From;
             mapHtml += '</td>';
 
             mapHtml += '<td style="vertical-align:middle;">';
             mapHtml += map.To;
+            mapHtml += '</td>';
+
+            mapHtml += '<td>';
+            mapHtml += '<paper-icon-button data-index="' + index + '" icon="delete" class="btnDeletePath"></paper-icon-button>';
             mapHtml += '</td>';
 
             mapHtml += '</tr>';
@@ -94,7 +94,30 @@
         });
     }
 
-    $(document).on('pageshow', "#libraryPathMappingPage", function () {
+    function onSubmit() {
+        Dashboard.showLoadingMsg();
+
+        var form = this;
+        var page = $(form).parents('.page');
+
+        ApiClient.getServerConfiguration().done(function (config) {
+
+            addSubstitution(page, config);
+            ApiClient.updateServerConfiguration(config).done(function () {
+
+                reload(page);
+            });
+        });
+
+        // Disable default form submission
+        return false;
+    }
+
+    $(document).on('pageinit', "#libraryPathMappingPage", function () {
+
+        $('.libraryPathMappingForm').off('submit', onSubmit).on('submit', onSubmit);
+
+    }).on('pageshow', "#libraryPathMappingPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -106,35 +129,10 @@
 
         });
 
-    }).on('pagehide', "#libraryPathMappingPage", function () {
+    }).on('pagebeforehide', "#libraryPathMappingPage", function () {
 
         currentConfig = null;
 
     });
-
-    window.LibraryPathMappingPage = {
-
-        onSubmit: function () {
-
-            Dashboard.showLoadingMsg();
-
-            var form = this;
-            var page = $(form).parents('.page');
-
-            ApiClient.getServerConfiguration().done(function (config) {
-
-                addSubstitution(page, config);
-                ApiClient.updateServerConfiguration(config).done(function () {
-
-                    reload(page);
-                });
-            });
-
-            // Disable default form submission
-            return false;
-
-        }
-
-    };
 
 })(jQuery, document, window);

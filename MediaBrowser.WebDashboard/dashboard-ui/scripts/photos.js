@@ -2,30 +2,46 @@
 
     var view = LibraryBrowser.getDefaultItemsView('Poster', 'Poster');
 
-    // The base query options
-    var query = {
+    var data = {};
+    function getQuery(tab) {
 
-        SortBy: "SortName",
-        SortOrder: "Ascending",
-        Fields: "PrimaryImageAspectRatio,SortName,SyncInfo",
-        StartIndex: 0,
-        ImageTypeLimit: 1,
-        EnableImageTypes: "Primary"
-    };
+        var key = getSavedQueryKey(tab);
+        var pageData = data[key];
 
-    function getSavedQueryKey() {
-
-        return 'photos' + (query.ParentId || '');
+        if (!pageData) {
+            pageData = data[key] = {
+                query: {
+                    SortBy: "SortName",
+                    SortOrder: "Ascending",
+                    Fields: "PrimaryImageAspectRatio,SortName,SyncInfo",
+                    ImageTypeLimit: 1,
+                    EnableImageTypes: "Primary",
+                    StartIndex: 0,
+                    Limit: LibraryBrowser.getDefaultPageSize()
+                }
+            };
+            setQueryPerTab(tab, pageData.query);
+            pageData.query.ParentId = LibraryMenu.getTopParentId();
+            LibraryBrowser.loadSavedQueryValues(key, pageData.query);
+        }
+        return pageData.query;
     }
 
-    function reloadItems(page) {
+    function getSavedQueryKey(tab) {
+
+        return LibraryBrowser.getSavedQueryKey('tab=' + tab);
+    }
+
+    function reloadItems(page, tabIndex) {
 
         Dashboard.showLoadingMsg();
+
+        var query = getQuery(tabIndex);
 
         ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
 
             var html = '';
             var pagingHtml = LibraryBrowser.getQueryPagingHtml({
@@ -36,114 +52,65 @@
                 showLimit: false
             });
 
-            $('.listTopPaging', page).html(pagingHtml).trigger('create');
+            page.querySelector('.listTopPaging').innerHTML = pagingHtml;
 
-            updateFilterControls(page);
+            if (view == "Poster") {
+                // Poster
+                html = LibraryBrowser.getPosterViewHtml({
+                    items: result.Items,
+                    shape: "square",
+                    context: getParameterByName('context') || 'photos',
+                    overlayText: true,
+                    lazy: true,
+                    coverImage: true,
+                    showTitle: tabIndex == 0,
+                    centerText: true
+                });
+            }
 
-            var defaultAction = query.MediaTypes == 'Photo' ? 'photoslideshow' : null;
-
-            // Poster
-            html = LibraryBrowser.getPosterViewHtml({
-                items: result.Items,
-                shape: "auto",
-                context: getParameterByName('context') || 'photos',
-                showTitle: false,
-                centerText: true,
-                lazy: true,
-                defaultAction: defaultAction
-            });
-
-            var elem = $('#items', page).html(html).lazyChildren();
-
-            $(pagingHtml).appendTo(elem).trigger('create');
+            var elem = page.querySelector('.itemsContainer');
+            elem.innerHTML = html + pagingHtml;
+            ImageLoader.lazyChildren(elem);
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
-                reloadItems(page);
+                reloadItems(page, tabIndex);
             });
 
             $('.btnPreviousPage', page).on('click', function () {
                 query.StartIndex -= query.Limit;
-                reloadItems(page);
+                reloadItems(page, tabIndex);
             });
 
-            LibraryBrowser.saveQueryValues(getSavedQueryKey(), query);
+            LibraryBrowser.saveQueryValues(getSavedQueryKey(tabIndex), query);
 
             Dashboard.hideLoadingMsg();
         });
     }
 
-    function updateFilterControls(page) {
+    function setQueryPerTab(tab, query) {
 
-        // Reset form values using the last used query
-        $('.radioSortBy', page).each(function () {
-
-            this.checked = (query.SortBy || '').toLowerCase() == this.getAttribute('data-sortby').toLowerCase();
-
-        }).checkboxradio('refresh');
-
-        $('.radioSortOrder', page).each(function () {
-
-            this.checked = (query.SortOrder || '').toLowerCase() == this.getAttribute('data-sortorder').toLowerCase();
-
-        }).checkboxradio('refresh');
-
-        $('.chkStandardFilter', page).each(function () {
-
-            var filters = "," + (query.Filters || "");
-            var filterName = this.getAttribute('data-filter');
-
-            this.checked = filters.indexOf(',' + filterName) != -1;
-
-        }).checkboxradio('refresh');
-    }
-
-    var filtersLoaded;
-    function reloadFiltersIfNeeded(page) {
-
-        if (!filtersLoaded) {
-
-            filtersLoaded = true;
-
-            QueryFilters.loadFilters(page, Dashboard.getCurrentUserId(), query, function () {
-
-                reloadItems(page);
-            });
-        }
-    }
-
-    function setQueryPerContext(page) {
-
-        var context = getParameterByName('context');
-
-        $('.libraryViewNav a', page).removeClass('ui-btn-active');
-
-        if (context == 'photos-photos') {
+        if (tab == 1) {
             query.Recursive = true;
             query.MediaTypes = 'Photo';
-            $('.lnkPhotos', page).addClass('ui-btn-active');
         }
-        else if (context == 'photos-videos') {
+        else if (tab == 2) {
             query.Recursive = true;
             query.MediaTypes = 'Video';
-            $('.lnkVideos', page).addClass('ui-btn-active');
         }
-        else {
+        else if (tab == 0) {
             query.Recursive = false;
             query.MediaTypes = null;
-            $('.lnkPhotoAlbums', page).addClass('ui-btn-active');
         }
 
         query.ParentId = getParameterByName('parentId') || LibraryMenu.getTopParentId();
     }
 
-    function startSlideshow(page, index) {
-
-        index += (query.StartIndex || 0);
+    function startSlideshow(page, itemQuery, startItemId) {
 
         var userId = Dashboard.getCurrentUserId();
 
-        var localQuery = $.extend({}, query);
+        var localQuery = $.extend({}, itemQuery);
         localQuery.StartIndex = 0;
         localQuery.Limit = null;
         localQuery.MediaTypes = "Photo";
@@ -152,18 +119,23 @@
 
         ApiClient.getItems(userId, localQuery).done(function (result) {
 
-            showSlideshow(page, result.Items, index);
+            showSlideshow(page, result.Items, startItemId);
         });
     }
 
-    function showSlideshow(page, items, index) {
+    function showSlideshow(page, items, startItemId) {
+
+        var screenWidth = $(window).width();
+        var screenHeight = $(window).height();
 
         var slideshowItems = items.map(function (item) {
 
             var imgUrl = ApiClient.getScaledImageUrl(item.Id, {
 
                 tag: item.ImageTags.Primary,
-                type: 'Primary'
+                type: 'Primary',
+                maxWidth: screenWidth,
+                maxHeight: screenHeight
 
             });
 
@@ -173,112 +145,86 @@
             };
         });
 
-        index = Math.max(index || 0, 0);
+        var index = items.map(function (i) {
+            return i.Id;
 
-        $.swipebox(slideshowItems, {
-            initialIndexOnArray: index,
-            hideBarsDelay: 30000
+        }).indexOf(startItemId);
+
+        if (index == -1) {
+            index = 0;
+        }
+
+        Dashboard.loadSwipebox().done(function () {
+
+            $.swipebox(slideshowItems, {
+                initialIndexOnArray: index,
+                hideBarsDelay: 30000
+            });
         });
+    }
+
+    function onListItemClick(e) {
+
+        var page = $(this).parents('.page')[0];
+        var info = LibraryBrowser.getListItemInfo(this);
+
+        if (info.mediaType == 'Photo') {
+            var tab = page.querySelector('neon-animated-pages').selected;
+            var query = getQuery(tab);
+
+            Photos.startSlideshow(page, query, info.id);
+            return false;
+        }
+    }
+
+    function loadTab(page, index) {
+
+        switch (index) {
+
+            case 0:
+                {
+                    reloadItems(page.querySelector('.albumTabContent'), 0);
+                }
+                break;
+            case 1:
+                {
+                    reloadItems(page.querySelector('.photoTabContent'), 1);
+                }
+                break;
+            case 2:
+                {
+                    reloadItems(page.querySelector('.videoTabContent'), 2);
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     $(document).on('pageinit', "#photosPage", function () {
 
         var page = this;
 
-        $('.viewPanel', page).on('panelopen', function () {
+        var tabs = page.querySelector('paper-tabs');
 
-            reloadFiltersIfNeeded(page);
-        });
-
-        $('.radioSortBy', this).on('click', function () {
-            query.SortBy = this.getAttribute('data-sortby');
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
-
-        $('.radioSortOrder', this).on('click', function () {
-            query.SortOrder = this.getAttribute('data-sortorder');
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
-
-        $('.chkStandardFilter', this).on('change', function () {
-
-            var filterName = this.getAttribute('data-filter');
-            var filters = query.Filters || "";
-
-            filters = (',' + filters).replace(',' + filterName, '').substring(1);
-
-            if (this.checked) {
-                filters = filters ? (filters + ',' + filterName) : filterName;
-            }
-
-            query.Filters = filters;
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
-
-        $('#radioBasicFilters', this).on('change', function () {
-
-            if (this.checked) {
-                $('.basicFilters', page).show();
-                $('.advancedFilters', page).hide();
-            } else {
-                $('.basicFilters', page).hide();
-            }
-        });
-
-        $('#radioAdvancedFilters', this).on('change', function () {
-
-            if (this.checked) {
-                $('.advancedFilters', page).show();
-                $('.basicFilters', page).hide();
-            } else {
-                $('.advancedFilters', page).hide();
-            }
-        });
-
-        $('#selectPageSize', page).on('change', function () {
-            query.Limit = parseInt(this.value);
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
-
-        $('.itemsContainer', page).on('photoslideshow', function (e, index) {
-            startSlideshow(page, index);
-        });
-
-    }).on('pagebeforeshow', "#photosPage", function () {
-
-        var page = this;
-
-        setQueryPerContext(page);
-
-        var limit = LibraryBrowser.getDefaultPageSize();
-
-        // If the default page size has changed, the start index will have to be reset
-        if (limit != query.Limit) {
-            query.Limit = limit;
-            query.StartIndex = 0;
+        var baseUrl = 'photos.html';
+        var topParentId = LibraryMenu.getTopParentId();
+        if (topParentId) {
+            baseUrl += '?topParentId=' + topParentId;
         }
 
-        var viewKey = getSavedQueryKey();
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, page.querySelector('neon-animated-pages'), baseUrl);
 
-        LibraryBrowser.loadSavedQueryValues(viewKey, query);
-        QueryFilters.onPageShow(page, query);
-
-        LibraryBrowser.getSavedViewSetting(viewKey).done(function (val) {
-
-            if (val) {
-                $('#selectView', page).val(val).selectmenu('refresh').trigger('change');
-            } else {
-                reloadItems(page);
-            }
+        $(page.querySelector('neon-animated-pages')).on('tabchange', function () {
+            loadTab(page, parseInt(this.selected));
         });
 
-    }).on('pageshow', "#photosPage", function () {
+        $(page).on('click', '.mediaItem', onListItemClick);
 
-        updateFilterControls(this);
     });
+
+    window.Photos = {
+        startSlideshow: startSlideshow
+    };
 
 })(jQuery, document);

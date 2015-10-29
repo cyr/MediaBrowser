@@ -5,16 +5,40 @@
         $('#chkEnableDebugEncodingLogging', page).checked(config.EnableDebugLogging).checkboxradio('refresh');
         $('#chkEnableThrottle', page).checked(config.EnableThrottling).checkboxradio('refresh');
 
-        $('.radioEncodingQuality', page).each(function() {
+        $('.radioEncodingQuality', page).each(function () {
 
             this.checked = config.EncodingQuality == this.value;
 
         }).checkboxradio('refresh');
-        
+
+        $('#selectVideoDecoder', page).val(config.HardwareVideoDecoder);
+        $('#selectThreadCount', page).val(config.EncodingThreadCount);
         $('#txtDownMixAudioBoost', page).val(config.DownMixAudioBoost);
         $('#txtTranscodingTempPath', page).val(config.TranscodingTempPath || '');
 
         Dashboard.hideLoadingMsg();
+    }
+
+    function onSubmit() {
+        Dashboard.showLoadingMsg();
+
+        var form = this;
+
+        ApiClient.getNamedConfiguration("encoding").done(function (config) {
+
+            config.EnableDebugLogging = $('#chkEnableDebugEncodingLogging', form).checked();
+            config.EncodingQuality = $('.radioEncodingQuality:checked', form).val();
+            config.DownMixAudioBoost = $('#txtDownMixAudioBoost', form).val();
+            config.TranscodingTempPath = $('#txtTranscodingTempPath', form).val();
+            config.EnableThrottling = $('#chkEnableThrottle', form).checked();
+            config.EncodingThreadCount = $('#selectThreadCount', form).val();
+            config.HardwareVideoDecoder = $('#selectVideoDecoder', form).val();
+
+            ApiClient.updateNamedConfiguration("encoding", config).done(Dashboard.processServerConfigurationUpdateResult);
+        });
+
+        // Disable default form submission
+        return false;
     }
 
     $(document).on('pageinit', "#encodingSettingsPage", function () {
@@ -23,23 +47,29 @@
 
         $('#btnSelectTranscodingTempPath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                callback: function (path) {
+                picker.show({
 
-                    if (path) {
-                        $('#txtTranscodingTempPath', page).val(path);
-                    }
-                    picker.close();
-                },
+                    callback: function (path) {
 
-                header: Globalize.translate('HeaderSelectTranscodingPath'),
+                        if (path) {
+                            $('#txtTranscodingTempPath', page).val(path);
+                        }
+                        picker.close();
+                    },
 
-                instruction: Globalize.translate('HeaderSelectTranscodingPathHelp')
+                    header: Globalize.translate('HeaderSelectTranscodingPath'),
+
+                    instruction: Globalize.translate('HeaderSelectTranscodingPathHelp')
+                });
             });
         });
+
+        $('.encodingSettingsForm').off('submit', onSubmit).on('submit', onSubmit);
+
 
     }).on('pageshow', "#encodingSettingsPage", function () {
 
@@ -53,29 +83,5 @@
 
         });
     });
-
-    window.EncodingSettingsPage = {
-
-        onSubmit: function () {
-
-            Dashboard.showLoadingMsg();
-
-            var form = this;
-
-            ApiClient.getNamedConfiguration("encoding").done(function (config) {
-
-                config.EnableDebugLogging = $('#chkEnableDebugEncodingLogging', form).checked();
-                config.EncodingQuality = $('.radioEncodingQuality:checked', form).val();
-                config.DownMixAudioBoost = $('#txtDownMixAudioBoost', form).val();
-                config.TranscodingTempPath = $('#txtTranscodingTempPath', form).val();
-                config.EnableThrottling = $('#chkEnableThrottle', form).checked();
-
-                ApiClient.updateNamedConfiguration("encoding", config).done(Dashboard.processServerConfigurationUpdateResult);
-            });
-
-            // Disable default form submission
-            return false;
-        }
-    };
 
 })(jQuery, document, window);

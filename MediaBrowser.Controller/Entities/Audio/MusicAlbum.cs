@@ -2,7 +2,6 @@
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Users;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -14,11 +13,8 @@ namespace MediaBrowser.Controller.Entities.Audio
     /// </summary>
     public class MusicAlbum : Folder, IHasAlbumArtist, IHasArtist, IHasMusicGenres, IHasLookupInfo<AlbumInfo>
     {
-        public List<Guid> SoundtrackIds { get; set; }
-
         public MusicAlbum()
         {
-            SoundtrackIds = new List<Guid>();
             Artists = new List<string>();
             AlbumArtists = new List<string>();
         }
@@ -58,12 +54,19 @@ namespace MediaBrowser.Controller.Entities.Audio
             get { return AlbumArtists.FirstOrDefault(); }
         }
 
+        [IgnoreDataMember]
+        public override bool SupportsPeople
+        {
+            get { return false; }
+        }
+
         public List<string> AlbumArtists { get; set; }
 
         /// <summary>
         /// Gets the tracks.
         /// </summary>
         /// <value>The tracks.</value>
+        [IgnoreDataMember]
         public IEnumerable<Audio> Tracks
         {
             get
@@ -75,49 +78,6 @@ namespace MediaBrowser.Controller.Entities.Audio
         protected override IEnumerable<BaseItem> GetEligibleChildrenForRecursiveChildren(User user)
         {
             return Tracks;
-        }
-
-        /// <summary>
-        /// Songs will group into us so don't also include us in the index
-        /// </summary>
-        /// <value><c>true</c> if [include in index]; otherwise, <c>false</c>.</value>
-        [IgnoreDataMember]
-        public override bool IncludeInIndex
-        {
-            get
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Override this to true if class should be grouped under a container in indicies
-        /// The container class should be defined via IndexContainer
-        /// </summary>
-        /// <value><c>true</c> if [group in index]; otherwise, <c>false</c>.</value>
-        [IgnoreDataMember]
-        public override bool GroupInIndex
-        {
-            get
-            {
-                return true;
-            }
-        }
-
-        /// <summary>
-        /// The unknwon artist
-        /// </summary>
-        private static readonly MusicArtist UnknwonArtist = new MusicArtist { Name = "<Unknown>" };
-
-        /// <summary>
-        /// Override this to return the folder that should be used to construct a container
-        /// for this item in an index.  GroupInIndex should be true as well.
-        /// </summary>
-        /// <value>The index container.</value>
-        [IgnoreDataMember]
-        public override Folder IndexContainer
-        {
-            get { return Parent as MusicArtist ?? UnknwonArtist; }
         }
 
         public List<string> Artists { get; set; }
@@ -167,6 +127,15 @@ namespace MediaBrowser.Controller.Entities.Audio
                 .Cast<Audio>()
                 .Select(i => i.GetLookupInfo())
                 .ToList();
+
+            var album = id.SongInfos
+                .Select(i => i.Album)
+                .FirstOrDefault(i => !string.IsNullOrWhiteSpace(i));
+
+            if (!string.IsNullOrWhiteSpace(album))
+            {
+                id.Name = album;
+            }
 
             return id;
         }

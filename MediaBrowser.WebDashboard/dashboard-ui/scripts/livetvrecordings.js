@@ -4,15 +4,28 @@
 
         var html = '';
 
-        html += '<li><a href="livetvrecordinglist.html?groupid=' + group.Id + '">';
+        html += '<paper-icon-item>';
 
-        html += '<h3>';
+        html += '<paper-fab mini class="blue" icon="live-tv" item-icon></paper-fab>';
+
+        html += '<paper-item-body two-line>';
+        html += '<a href="livetvrecordinglist.html?groupid=' + group.Id + '" class="clearLink">';
+
+        html += '<div>';
         html += group.Name;
-        html += '</h3>';
+        html += '</div>';
 
-        html += '<span class="ui-li-count">' + group.RecordingCount + '</span>';
+        html += '<div secondary>';
+        if (group.RecordingCount == 1) {
+            html += Globalize.translate('ValueItemCount', group.RecordingCount);
+        } else {
+            html += Globalize.translate('ValueItemCountPlural', group.RecordingCount);
+        }
+        html += '</div>';
 
-        html += '</li>';
+        html += '</a>';
+        html += '</paper-item-body>';
+        html += '</paper-icon-item>';
 
         return html;
     }
@@ -27,41 +40,41 @@
 
         var html = '';
 
-        html += '<ul data-role="listview" data-inset="true">';
+        html += '<div class="paperList">';
 
         for (var i = 0, length = groups.length; i < length; i++) {
 
             html += getRecordingGroupHtml(groups[i]);
         }
 
-        html += '</ul>';
+        html += '</div>';
 
-        $('#recordingGroupItems', page).html(html).trigger('create');
+        page.querySelector('#recordingGroupItems').innerHTML = html;
 
         Dashboard.hideLoadingMsg();
     }
 
     function renderRecordings(elem, recordings) {
 
-        var screenWidth = $(window).width();
-
         if (recordings.length) {
-            elem.show();
+            elem.classList.remove('hide');
         } else {
-            elem.hide();
+            elem.classList.add('hide');
         }
 
-        $('.recordingItems', elem).html(LibraryBrowser.getPosterViewHtml({
-            
+        var recordingItems = elem.querySelector('.recordingItems');
+        recordingItems.innerHTML = LibraryBrowser.getPosterViewHtml({
             items: recordings,
             shape: "auto",
             showTitle: true,
             showParentTitle: true,
-            overlayText: screenWidth >= 600,
+            centerText: true,
             coverImage: true,
             lazy: true
 
-        })).lazyChildren();
+        });
+
+        ImageLoader.lazyChildren(recordingItems);
     }
 
     function reload(page) {
@@ -75,7 +88,7 @@
 
         }).done(function (result) {
 
-            renderRecordings($('#activeRecordings', page), result.Items);
+            renderRecordings(page.querySelector('#activeRecordings'), result.Items);
 
         });
 
@@ -87,8 +100,7 @@
 
         }).done(function (result) {
 
-            renderRecordings($('#latestRecordings', page), result.Items);
-
+            renderRecordings(page.querySelector('#latestRecordings'), result.Items);
         });
 
         ApiClient.getLiveTvRecordingGroups({
@@ -102,12 +114,11 @@
         });
     }
 
-    $(document).on('pagebeforeshow', "#liveTvRecordingsPage", function () {
+    window.LiveTvPage.renderRecordingsTab = function (page, tabContent) {
 
-        var page = this;
-
-        reload(page);
-
-    });
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            reload(tabContent);
+        }
+    };
 
 })(jQuery, document);

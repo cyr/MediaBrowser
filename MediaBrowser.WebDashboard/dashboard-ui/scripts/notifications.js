@@ -10,7 +10,7 @@
 
         self.getNotificationsSummary = function () {
 
-            var apiClient = ConnectionManager.currentApiClient();
+            var apiClient = window.ApiClient;
 
             if (!apiClient) {
                 return;
@@ -24,6 +24,10 @@
         self.updateNotificationCount = function () {
 
             if (!Dashboard.getCurrentUserId()) {
+                return;
+            }
+
+            if (!window.ApiClient) {
                 return;
             }
 
@@ -43,45 +47,6 @@
             });
         };
 
-        self.showNotificationsFlyout = function () {
-
-            var html = '<div data-role="panel" data-position="right" data-display="overlay" class="notificationsFlyout" data-position-fixed="true" data-theme="a">';
-
-            html += '<h1 style="margin: .25em 0;">';
-            html += '<span style="vertical-align:middle;">' + Globalize.translate('HeaderNotifications') + '</span>';
-            html += '<a data-role="button" data-inline="true" data-icon="arrow-r" href="notificationlist.html" data-iconpos="notext" style="vertical-align:middle;margin-left:.5em;">' + Globalize.translate('ButtonViewNotifications') + '</a>';
-            html += '</h1>';
-
-            html += '<div>';
-
-            html += '<div class="notificationsFlyoutlist">Loading...';
-
-            html += '</div>';
-
-            html += '</div>';
-
-            html += '</div>';
-
-            $(document.body).append(html);
-
-            $('.notificationsFlyout').panel({}).trigger('create').panel("open").on("panelclose", function () {
-
-                $(this).off("panelclose").remove();
-
-            });
-
-            self.isFlyout = true;
-
-            var startIndex = 0;
-            var limit = 5;
-            var elem = $('.notificationsFlyoutlist');
-
-            refreshNotifications(startIndex, limit, elem, null, false).done(function() {
-                
-                self.markNotificationsRead([]);
-            });
-        };
-
         self.markNotificationsRead = function (ids, callback) {
 
             ApiClient.markNotificationsRead(Dashboard.getCurrentUserId(), ids, true).done(function () {
@@ -98,50 +63,35 @@
 
         };
 
-        self.showNotificationsList = function (startIndex, limit, elem, btn) {
+        self.showNotificationsList = function (startIndex, limit, elem) {
 
-            refreshNotifications(startIndex, limit, elem, btn, true);
+            refreshNotifications(startIndex, limit, elem, true);
 
         };
     }
 
-    function refreshNotifications(startIndex, limit, elem, btn, showPaging) {
+    function refreshNotifications(startIndex, limit, elem, showPaging) {
 
-        var apiClient = ConnectionManager.currentApiClient();
+        var apiClient = window.ApiClient;
 
         if (apiClient) {
             return apiClient.getNotifications(Dashboard.getCurrentUserId(), { StartIndex: startIndex, Limit: limit }).done(function (result) {
 
-                listUnreadNotifications(result.Notifications, result.TotalRecordCount, startIndex, limit, elem, btn, showPaging);
+                listUnreadNotifications(result.Notifications, result.TotalRecordCount, startIndex, limit, elem, showPaging);
 
             });
         }
     }
 
-    function listUnreadNotifications(list, totalRecordCount, startIndex, limit, elem, btn, showPaging) {
+    function listUnreadNotifications(list, totalRecordCount, startIndex, limit, elem, showPaging) {
 
         if (!totalRecordCount) {
             elem.html('<p style="padding:.5em 1em;">' + Globalize.translate('LabelNoUnreadNotifications') + '</p>');
 
-            if (btn) {
-                btn.hide();
-            }
             return;
         }
 
         Notifications.total = totalRecordCount;
-
-        if (btn) {
-            if (list.filter(function (n) {
-
-                return !n.IsRead;
-
-            }).length) {
-                btn.show();
-            } else {
-                btn.hide();
-            }
-        }
 
         var html = '';
 
@@ -149,7 +99,13 @@
 
             var query = { StartIndex: startIndex, Limit: limit };
 
-            html += LibraryBrowser.getPagingHtml(query, totalRecordCount, false, limit, false);
+            html += LibraryBrowser.getQueryPagingHtml({
+                startIndex: query.StartIndex,
+                limit: query.Limit,
+                totalRecordCount: totalRecordCount,
+                showLimit: false,
+                updatePageSizeSetting: false
+            });
         }
 
         for (var i = 0, length = list.length; i < length; i++) {
@@ -165,84 +121,96 @@
 
     function getNotificationHtml(notification) {
 
-        var html = '';
+        var itemHtml = '';
 
-        var cssClass = notification.IsRead ? "flyoutNotification" : "flyoutNotification unreadFlyoutNotification";
-
-        html += '<div data-notificationid="' + notification.Id + '" class="' + cssClass + '">';
-
-        html += '<div class="notificationImage">';
-        html += getImageHtml(notification);
-        html += '</div>';
-
-        html += '<div class="notificationContent">';
-
-        html += '<p style="font-size:16px;margin: .5em 0 .5em;" class="notificationName">';
         if (notification.Url) {
-            html += '<a href="' + notification.Url + '" target="_blank" style="text-decoration:none;">' + notification.Name + '</a>';
-        } else {
-            html += notification.Name;
-        }
-        html += '</p>';
-
-        html += '<p class="notificationTime" style="margin: .5em 0;">' + humane_date(notification.Date) + '</p>';
-
-        if (notification.Description) {
-            html += '<p style="margin: .5em 0;max-height:100px;overflow:hidden;text-overflow:ellipsis;">' + notification.Description + '</p>';
+            itemHtml += '<a class="clearLink" href="' + notification.Url + '" target="_blank">';
         }
 
-        html += '</div>';
-
-        html += '</div>';
-
-        return html;
-    }
-
-    function getImageHtml(notification) {
+        itemHtml += '<paper-icon-item>';
 
         if (notification.Level == "Error") {
-
-            return '<div class="imgNotification imgNotificationError"><div class="imgNotificationInner imgNotificationIcon"></div></div>';
-
-        }
-        if (notification.Level == "Warning") {
-
-            return '<div class="imgNotification imgNotificationWarning"><div class="imgNotificationInner imgNotificationIcon"></div></div>';
-
+            itemHtml += '<paper-fab mini class="" style="background:#cc3333;" icon="error" item-icon></paper-fab>';
+        } else {
+            itemHtml += '<paper-fab mini  class="blue" icon="dvr" item-icon></paper-fab>';
         }
 
-        return '<div class="imgNotification imgNotificationNormal"><div class="imgNotificationInner imgNotificationIcon"></div></div>';
+        itemHtml += '<paper-item-body three-line>';
 
+        itemHtml += '<div>';
+        itemHtml += notification.Name;
+        itemHtml += '</div>';
+
+        itemHtml += '<div secondary>';
+        itemHtml += humane_date(notification.Date);
+        itemHtml += '</div>';
+
+        if (notification.Description) {
+            itemHtml += '<div secondary>';
+            itemHtml += notification.Description;
+            itemHtml += '</div>';
+        }
+
+        itemHtml += '</paper-item-body>';
+
+        itemHtml += '</paper-icon-item>';
+
+        if (notification.Url) {
+            itemHtml += '</a>';
+        }
+
+        return itemHtml;
     }
 
     window.Notifications = new notifications();
+    var needsRefresh = true;
 
-    $(document).on('headercreated', function (e) {
+    function onWebSocketMessage(e, msg) {
+        if (msg.MessageType === "NotificationUpdated" || msg.MessageType === "NotificationAdded" || msg.MessageType === "NotificationsMarkedRead") {
 
-        if (ConnectionManager.currentApiClient()) {
-            $('<a class="headerButton headerButtonRight btnNotifications" href="#" title="Notifications"><div class="btnNotificationsInner">0</div></a>').insertAfter($('.headerSearchButton')).on('click', Notifications.showNotificationsFlyout);
+            Notifications.getNotificationsSummaryPromise = null;
 
             Notifications.updateNotificationCount();
         }
-    });
-
-    function initializeApiClient(apiClient) {
-        $(apiClient).on("websocketmessage", function (e, msg) {
-
-
-            if (msg.MessageType === "NotificationUpdated" || msg.MessageType === "NotificationAdded" || msg.MessageType === "NotificationsMarkedRead") {
-
-                Notifications.getNotificationsSummaryPromise = null;
-
-                Notifications.updateNotificationCount();
-            }
-
-        });
     }
 
-    $(ConnectionManager).on('apiclientcreated', function (e, apiClient) {
+    function initializeApiClient(apiClient) {
+        $(apiClient).off("websocketmessage", onWebSocketMessage).on("websocketmessage", onWebSocketMessage);
+    }
 
-        initializeApiClient(apiClient);
+    $(document).on('headercreated', function (e, apiClient) {
+        $('.btnNotifications').on('click', function () {
+            Dashboard.navigate('notificationlist.html');
+        });
+    });
+
+    Dashboard.ready(function () {
+
+        if (window.ApiClient) {
+            initializeApiClient(window.ApiClient);
+        }
+
+        $(ConnectionManager).on('apiclientcreated', function (e, apiClient) {
+            initializeApiClient(apiClient);
+        });
+
+        Events.on(ConnectionManager, 'localusersignedin', function () {
+            needsRefresh = true;
+        });
+
+        Events.on(ConnectionManager, 'localusersignedout', function () {
+            needsRefresh = true;
+        });
+    });
+
+    pageClassOn('pageshow', "type-interior", function () {
+
+        var page = $(this);
+
+        if (needsRefresh) {
+            Notifications.updateNotificationCount();
+        }
+
     });
 
 })(jQuery, document, Dashboard, LibraryBrowser);

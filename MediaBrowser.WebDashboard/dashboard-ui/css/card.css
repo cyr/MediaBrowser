@@ -39,22 +39,62 @@
         text-overflow: ellipsis;
     }
 
-.smallBackdropPosterItem .cardOverlayInner > div {
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
+.buttonCard:hover .cardBox {
+    opacity: .6;
 }
 
 .cardBox {
-    margin: 1px;
+    margin: 2px;
 }
 
-/*@media all and (max-width: 600px) {
+@media all and (max-width: 800px) {
 
     .cardBox {
-        margin: 0;
+        margin: 1px;
     }
-}*/
+}
+
+.largeCardMargin .cardBox {
+    margin: 10px;
+}
+
+.defaultBackground .cardImage {
+    background-color: #333;
+}
+
+.homeTopViews .defaultBackground .cardImage {
+    background-color: #181818;
+}
+
+.homeTopViews .cardImage {
+    border-radius: 5px;
+}
+
+.cardOverlayPlayButton {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    color: #333;
+    width: 20px;
+    height: 20px;
+    background-color: rgba(210,210,210,.9);
+    border-radius: 500px;
+    padding: 6px;
+    margin: 0 .5em .5em 0;
+}
+
+.cardOverlayMoreButton {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    color: #333;
+    width: 20px;
+    height: 20px;
+    background-color: rgba(210,210,210,.9);
+    border-radius: 500px;
+    padding: 6px;
+    margin: 0 .5em .5em 0;
+}
 
 .grayscale {
     -webkit-filter: grayscale(100%);
@@ -63,16 +103,14 @@
 }
 
 .bottomPaddedCard .cardBox {
-    margin-bottom: 5px;
+    margin-bottom: 24px;
 }
 
-.visualFooterCard .outerCardFooter {
-    background: #111;
-    padding-bottom: 4px;
+.hiddenScrollX .bottomPaddedCard .cardBox {
+    margin-bottom: 0;
 }
 
 .visualCardBox {
-    padding: 5px;
     -moz-border-radius: 2px;
     -webkit-border-radius: 2px;
     border-radius: 2px;
@@ -81,16 +119,11 @@
     -webkit-box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     background: #fff;
-    margin: 1px;
+    margin: 7px;
 }
 
-/*.visualCardBox .cardFooter {
-    padding: 0 2px;
-}*/
-
-.ui-page-theme-b .visualCardBox {
-    background: rgba(45,45,45,.85);
-    border: 1px solid #1f1f1f;
+.ui-body-b .visualCardBox {
+    background: rgba(40,40,40,.85);
     border-radius: 3px;
 }
 
@@ -98,15 +131,11 @@
     position: relative;
 }
 
-.backdropCard .cardPadder {
+.backdropCard .cardPadder, .smallBackdropCard .cardPadder, .overflowBackdropCard .cardPadder {
     padding-bottom: 56.25%;
 }
 
-.smallBackdropCard .cardPadder {
-    padding-bottom: 56.25%;
-}
-
-.squareCard .cardPadder {
+.squareCard .cardPadder, .overflowSquareCard .cardPadder {
     padding-bottom: 100%;
 }
 
@@ -114,7 +143,7 @@
     padding-bottom: 75%;
 }
 
-.portraitCard .cardPadder {
+.portraitCard .cardPadder, .overflowPortraitCard .cardPadder {
     padding-bottom: 150%;
 }
 
@@ -128,6 +157,8 @@
     bottom: 0;
     left: 0;
     right: 0;
+    /* Needed to keep the cardOverlayTarget from showing outside the bounds while it animates */
+    overflow: hidden;
 }
 
     .cardContent:not(.noHoverEffect):hover .cardImage {
@@ -157,26 +188,70 @@
     .cardContent .cardFooter {
         position: absolute;
         bottom: 0;
-        background: -moz-linear-gradient(top, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%); /* FF3.6+ */
-        background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(0,0,0,0)), color-stop(100%,rgba(0,0,0,0.7))); /* Chrome,Safari4+ */
-        background: -webkit-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%); /* Chrome10+,Safari5.1+ */
-        background: -o-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%); /* Opera 11.10+ */
-        background: -ms-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%); /* IE10+ */
-        background: linear-gradient(to bottom, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%); /* W3C */
         left: 0;
-        right: 0;
-        color: #fff;
+        color: #eee;
+        padding: 6px 0 2px 0;
+        max-width: 100%;
+        background: -moz-linear-gradient(top, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%) !important; /* FF3.6+ */
+        background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(0,0,0,0)), color-stop(100%,rgba(0,0,0,0.7))) !important; /* Chrome,Safari4+ */
+        background: -webkit-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* Chrome10+,Safari5.1+ */
+        background: -o-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* Opera 11.10+ */
+        background: -ms-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* IE10+ */
+        background: linear-gradient(to bottom, rgba(0,0,0,0) 0%,rgba(0,0,0,0.75) 100%) !important; /* W3C */
     }
+
+        .cardContent .cardFooter:not(.fullCardFooter) {
+            background: rgba(0, 0, 0, .6) !important;
+        }
+
+.lightCardFooter {
+    background: -moz-linear-gradient(top, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%) !important; /* FF3.6+ */
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(0,0,0,0)), color-stop(100%,rgba(0,0,0,0.7))) !important; /* Chrome,Safari4+ */
+    background: -webkit-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* Chrome10+,Safari5.1+ */
+    background: -o-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* Opera 11.10+ */
+    background: -ms-linear-gradient(top, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* IE10+ */
+    background: linear-gradient(to bottom, rgba(0,0,0,0) 0%,rgba(0,0,0,0.7) 100%) !important; /* W3C */
+}
+
+.fullCardFooter {
+    right: 0;
+}
+
+.visualCardBox .outerCardFooter {
+    padding: 3px;
+    position: relative;
+}
+
+.btnCardOptions {
+    padding: 10px !important;
+    margin: 0 !important;
+    color: inherit;
+    font-size: 20px;
+}
 
 .cardText {
     text-overflow: ellipsis;
     overflow: hidden;
     text-wrap: none;
     white-space: nowrap;
-    padding: 5px 4px 2px;
-    text-shadow: none;
+    padding: 5px 5px 2px;
     font-weight: 400;
     line-height: 1.4;
+}
+
+.homeTopViews .cardText {
+    font-size: 15px;
+    padding-top: 10px;
+}
+
+.cardButtonContainer {
+    text-align: right;
+    float: right;
+    padding: 5px 0 2px;
+}
+
+.cardContent .cardFooter .cardText {
+    font-size: 16px;
 }
 
 .cardOverlayInner {
@@ -193,15 +268,19 @@
     left: 0;
     right: 0;
     text-align: center;
+    line-height: initial;
 }
 
 .cardContent .cardText {
-    padding-left: 5px;
-    padding: 0 5px 4px;
+    padding: 0 6px 4px 5px;
 }
 
 .outerCardFooter .cardText + .cardText {
-    color: #ddd;
+    opacity: .8;
+}
+
+.outerCardFooter .cardText:first-child {
+    padding-top: 7px;
 }
 
 @media all and (max-width: 600px) {
@@ -219,13 +298,35 @@
     height: 100%;
 }
 
+    .cardImage canvas {
+        width: 100%;
+        height: 100%;
+    }
+
 .coveredCardImage {
     background-size: cover;
+    background-position: center center;
 }
 
 .centeredCardImage {
     background-position: center center;
 }
+
+.ui-body-b .iconCardImage {
+    color: #fff;
+}
+
+.iconCardImage {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+}
+
+    .iconCardImage iron-icon {
+        width: 30%;
+        height: 30%;
+    }
 
 .bannerCard {
     width: 100%;
@@ -247,6 +348,16 @@
     width: 33.3%;
 }
 
+.overflowPortraitCard {
+    width: 40%;
+    max-width: 200px;
+}
+
+.overflowBackdropCard {
+    width: 80%;
+    max-width: 400px;
+}
+
 .cardProgress {
     line-height: 7px;
 }
@@ -256,6 +367,17 @@
         width: 100%;
         opacity: .8;
     }
+
+.overflowSquareCard {
+    width: 42%;
+}
+
+@media all and (max-width: 420px) {
+
+    .backdropCard {
+        width: 100% !important;
+    }
+}
 
 @media all and (max-width: 1200px) {
 
@@ -267,41 +389,50 @@
 
 @media all and (min-width: 500px) {
 
+    .smallBackdropCard {
+        width: 33.3%;
+    }
+
     .squareCard {
         width: 33.3%;
     }
 }
-
-
-@media all and (min-width: 540px) {
-
-    .smallBackdropCard {
-        width: 33.3%;
-    }
-}
-
 
 @media all and (min-width: 640px) {
 
     .portraitCard {
         width: 25%;
     }
+
+    .overflowPortraitCard {
+        width: 36%;
+    }
+
+    .overflowBackdropCard {
+        width: 60%;
+    }
+
+    .overflowSquareCard {
+        width: 30%;
+    }
 }
 
 @media all and (min-width: 700px) {
+    .squareCard {
+        width: 25%;
+    }
+}
+
+@media all and (min-width: 770px) {
     .backdropCard {
         width: 33.3%;
-    }
-
-    .bannerCard {
-        width: 50%;
     }
 }
 
 @media all and (min-width: 800px) {
 
-    .squareCard {
-        width: 25%;
+    .bannerCard {
+        width: 50%;
     }
 
     .portraitCard {
@@ -314,14 +445,30 @@
 }
 
 
-@media all and (min-width: 1000px) {
+@media all and (min-width: 900px) {
 
     .squareCard {
         width: 20%;
     }
+}
+
+@media all and (min-width: 1000px) {
+
 
     .smallBackdropCard {
         width: 20%;
+    }
+
+    .overflowPortraitCard {
+        width: 23%;
+    }
+
+    .overflowBackdropCard {
+        width: 40%;
+    }
+
+    .overflowSquareCard {
+        width: 22%;
     }
 }
 
@@ -433,10 +580,17 @@
     width: 50%;
 }
 
-@media all and (min-width: 540px) {
+@media all and (min-width: 800px) {
 
     .detailPage169Card {
         width: 33.3%;
+    }
+}
+
+@media all and (max-width: 420px) {
+
+    .detailPage169Card {
+        width: 100% !important;
     }
 }
 
@@ -508,17 +662,24 @@
     }
 }
 
-@media all and (min-width: 1400px) {
+@media all and (min-width: 800px) {
 
     .homePageSmallBackdropCard {
         width: 20%;
     }
 }
 
-@media all and (min-width: 1920px) {
+@media all and (min-width: 1100px) {
 
     .homePageSmallBackdropCard {
-        width: 14.285714285714285714285714285714%;
+        width: 16.66666666666667%;
+    }
+}
+
+@media all and (min-width: 1440px) {
+
+    .homePageSmallBackdropCard {
+        width: 12.5%;
     }
 }
 

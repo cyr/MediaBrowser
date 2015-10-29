@@ -7,25 +7,30 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Providers.Manager;
 using System.Collections.Generic;
+using CommonIO;
 
 namespace MediaBrowser.Providers.Folders
 {
     public class UserViewMetadataService : MetadataService<UserView, ItemLookupInfo>
     {
-        public UserViewMetadataService(IServerConfigurationManager serverConfigurationManager, ILogger logger, IProviderManager providerManager, IProviderRepository providerRepo, IFileSystem fileSystem, IUserDataManager userDataManager)
-            : base(serverConfigurationManager, logger, providerManager, providerRepo, fileSystem, userDataManager)
+        public UserViewMetadataService(IServerConfigurationManager serverConfigurationManager, ILogger logger, IProviderManager providerManager, IProviderRepository providerRepo, IFileSystem fileSystem, IUserDataManager userDataManager, ILibraryManager libraryManager) : base(serverConfigurationManager, logger, providerManager, providerRepo, fileSystem, userDataManager, libraryManager)
         {
         }
 
-        /// <summary>
-        /// Merges the specified source.
-        /// </summary>
-        /// <param name="source">The source.</param>
-        /// <param name="target">The target.</param>
-        /// <param name="lockedFields">The locked fields.</param>
-        /// <param name="replaceData">if set to <c>true</c> [replace data].</param>
-        /// <param name="mergeMetadataSettings">if set to <c>true</c> [merge metadata settings].</param>
-        protected override void MergeData(UserView source, UserView target, List<MetadataFields> lockedFields, bool replaceData, bool mergeMetadataSettings)
+        protected override void MergeData(MetadataResult<UserView> source, MetadataResult<UserView> target, List<MetadataFields> lockedFields, bool replaceData, bool mergeMetadataSettings)
+        {
+            ProviderUtils.MergeBaseItemData(source, target, lockedFields, replaceData, mergeMetadataSettings);
+        }
+    }
+
+    public class CollectionFolderMetadataService : MetadataService<CollectionFolder, ItemLookupInfo>
+    {
+        public CollectionFolderMetadataService(IServerConfigurationManager serverConfigurationManager, ILogger logger, IProviderManager providerManager, IProviderRepository providerRepo, IFileSystem fileSystem, IUserDataManager userDataManager, ILibraryManager libraryManager)
+            : base(serverConfigurationManager, logger, providerManager, providerRepo, fileSystem, userDataManager, libraryManager)
+        {
+        }
+
+        protected override void MergeData(MetadataResult<CollectionFolder> source, MetadataResult<CollectionFolder> target, List<MetadataFields> lockedFields, bool replaceData, bool mergeMetadataSettings)
         {
             ProviderUtils.MergeBaseItemData(source, target, lockedFields, replaceData, mergeMetadataSettings);
         }

@@ -2,6 +2,7 @@
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.Library;
+using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Providers;
 using MediaBrowser.Model.Sync;
 using System;
@@ -66,6 +67,8 @@ namespace MediaBrowser.Model.Dto
         public bool? CanDelete { get; set; }
         public bool? CanDownload { get; set; }
 
+        public bool? HasSubtitles { get; set; }
+        
         public string PreferredMetadataLanguage { get; set; }
         public string PreferredMetadataCountryCode { get; set; }
 
@@ -73,8 +76,6 @@ namespace MediaBrowser.Model.Dto
         public string ShareUrl { get; set; }
 
         public float? Metascore { get; set; }
-
-        public bool? IsUnidentified { get; set; }
         public bool? HasDynamicCategories { get; set; }
 
         public int? AnimeSeriesIndex { get; set; }
@@ -99,6 +100,11 @@ namespace MediaBrowser.Model.Dto
         /// </summary>
         /// <value>The synchronize status.</value>
         public SyncJobItemStatus? SyncStatus { get; set; }
+        /// <summary>
+        /// Gets or sets the synchronize percent.
+        /// </summary>
+        /// <value>The synchronize percent.</value>
+        public double? SyncPercent { get; set; }
 
         /// <summary>
         /// Gets or sets the DVD season number.
@@ -272,12 +278,6 @@ namespace MediaBrowser.Model.Dto
         public int? ProductionYear { get; set; }
 
         /// <summary>
-        /// Gets or sets the season count.
-        /// </summary>
-        /// <value>The season count.</value>
-        public int? SeasonCount { get; set; }
-
-        /// <summary>
         /// Gets or sets the players supported by a game.
         /// </summary>
         /// <value>The players.</value>
@@ -442,7 +442,57 @@ namespace MediaBrowser.Model.Dto
         /// Gets or sets the status.
         /// </summary>
         /// <value>The status.</value>
-        public SeriesStatus? Status { get; set; }
+        public string Status { get; set; }
+
+        [IgnoreDataMember]
+        public SeriesStatus? SeriesStatus
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Status))
+                {
+                    return null;
+                }
+
+                return (SeriesStatus)Enum.Parse(typeof(SeriesStatus), Status, true);
+            }
+            set
+            {
+                if (value == null)
+                {
+                    Status = null;
+                }
+                else
+                {
+                    Status = value.Value.ToString();
+                }
+            }
+        }
+
+        [IgnoreDataMember]
+        public RecordingStatus? RecordingStatus
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Status))
+                {
+                    return null;
+                }
+
+                return (RecordingStatus)Enum.Parse(typeof(RecordingStatus), Status, true);
+            }
+            set
+            {
+                if (value == null)
+                {
+                    Status = null;
+                }
+                else
+                {
+                    Status = value.Value.ToString();
+                }
+            }
+        }
 
         /// <summary>
         /// Gets or sets the air time.
@@ -590,6 +640,7 @@ namespace MediaBrowser.Model.Dto
         /// Gets or sets a value indicating whether [supports playlists].
         /// </summary>
         /// <value><c>true</c> if [supports playlists]; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool SupportsPlaylists
         {
             get
@@ -796,6 +847,17 @@ namespace MediaBrowser.Model.Dto
         public double? Longitude { get; set; }
         public double? Altitude { get; set; }
         public int? IsoSpeedRating { get; set; }
+
+        /// <summary>
+        /// Used by RecordingGroup
+        /// </summary>
+        public int? RecordingCount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the series timer identifier.
+        /// </summary>
+        /// <value>The series timer identifier.</value>
+        public string SeriesTimerId { get; set; }
 
         /// <summary>
         /// Gets a value indicating whether this instance can resume.
@@ -1013,9 +1075,118 @@ namespace MediaBrowser.Model.Dto
             get { return StringHelper.EqualsIgnoreCase(Type, "Studio"); }
         }
 
+        [IgnoreDataMember]
+        public bool SupportsSimilarItems
+        {
+            get
+            {
+                return IsType("Movie") || IsType("Series") || IsType("MusicAlbum") || IsType("MusicArtist") || IsType("Program") || IsType("Recording") || IsType("ChannelVideoItem") || IsType("Game");
+            }
+        }
+
         /// <summary>
         /// Occurs when [property changed].
         /// </summary>
         public event PropertyChangedEventHandler PropertyChanged;
+
+        /// <summary>
+        /// Gets or sets the program identifier.
+        /// </summary>
+        /// <value>The program identifier.</value>
+        public string ProgramId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the channel primary image tag.
+        /// </summary>
+        /// <value>The channel primary image tag.</value>
+        public string ChannelPrimaryImageTag { get; set; }
+
+        /// <summary>
+        /// The start date of the recording, in UTC.
+        /// </summary>
+        public DateTime? StartDate { get; set; }
+
+        /// <summary>
+        /// Gets or sets the completion percentage.
+        /// </summary>
+        /// <value>The completion percentage.</value>
+        public double? CompletionPercentage { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is repeat.
+        /// </summary>
+        /// <value><c>true</c> if this instance is repeat; otherwise, <c>false</c>.</value>
+        public bool? IsRepeat { get; set; }
+
+        /// <summary>
+        /// Gets or sets the episode title.
+        /// </summary>
+        /// <value>The episode title.</value>
+        public string EpisodeTitle { get; set; }
+
+        /// <summary>
+        /// Gets or sets the type of the channel.
+        /// </summary>
+        /// <value>The type of the channel.</value>
+        public ChannelType? ChannelType { get; set; }
+
+        /// <summary>
+        /// Gets or sets the audio.
+        /// </summary>
+        /// <value>The audio.</value>
+        public ProgramAudio? Audio { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is movie.
+        /// </summary>
+        /// <value><c>true</c> if this instance is movie; otherwise, <c>false</c>.</value>
+        public bool? IsMovie { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is sports.
+        /// </summary>
+        /// <value><c>true</c> if this instance is sports; otherwise, <c>false</c>.</value>
+        public bool? IsSports { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is series.
+        /// </summary>
+        /// <value><c>true</c> if this instance is series; otherwise, <c>false</c>.</value>
+        public bool? IsSeries { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is live.
+        /// </summary>
+        /// <value><c>true</c> if this instance is live; otherwise, <c>false</c>.</value>
+        public bool? IsLive { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is news.
+        /// </summary>
+        /// <value><c>true</c> if this instance is news; otherwise, <c>false</c>.</value>
+        public bool? IsNews { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is kids.
+        /// </summary>
+        /// <value><c>true</c> if this instance is kids; otherwise, <c>false</c>.</value>
+        public bool? IsKids { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is premiere.
+        /// </summary>
+        /// <value><c>true</c> if this instance is premiere; otherwise, <c>false</c>.</value>
+        public bool? IsPremiere { get; set; }
+
+        /// <summary>
+        /// Gets or sets the timer identifier.
+        /// </summary>
+        /// <value>The timer identifier.</value>
+        public string TimerId { get; set; }
+        /// <summary>
+        /// Gets or sets the current program.
+        /// </summary>
+        /// <value>The current program.</value>
+        public BaseItemDto CurrentProgram { get; set; }
     }
 }

@@ -6,18 +6,44 @@
         $('#chkBlastAliveMessages', page).checked(config.BlastAliveMessages).checkboxradio("refresh");
         $('#txtBlastInterval', page).val(config.BlastAliveMessageIntervalSeconds);
 
-        $('#chkEnableEnhancedMovies', page).checked(config.EnableEnhancedMovies).checkboxradio("refresh");
+        $('#chkEnableMovieFolders', page).checked(config.EnableMovieFolders).checkboxradio("refresh");
 
         var usersHtml = users.map(function (u) {
             return '<option value="' + u.Id + '">' + u.Name + '</option>';
         }).join('');
 
-        $('#selectUser', page).html(usersHtml).val(config.DefaultUserId || '').selectmenu("refresh");
+        $('#selectUser', page).html(usersHtml).val(config.DefaultUserId || '');
 
         Dashboard.hideLoadingMsg();
     }
 
-    $(document).on('pageshow', "#dlnaServerSettingsPage", function () {
+    function onSubmit() {
+
+        Dashboard.showLoadingMsg();
+
+        var form = this;
+
+        ApiClient.getNamedConfiguration("dlna").done(function (config) {
+
+            config.EnableServer = $('#chkEnableServer', form).checked();
+            config.BlastAliveMessages = $('#chkBlastAliveMessages', form).checked();
+            config.BlastAliveMessageIntervalSeconds = $('#txtBlastInterval', form).val();
+            config.DefaultUserId = $('#selectUser', form).val();
+
+            config.EnableMovieFolders = $('#chkEnableMovieFolders', form).checked();
+
+            ApiClient.updateNamedConfiguration("dlna", config).done(Dashboard.processServerConfigurationUpdateResult);
+        });
+
+        // Disable default form submission
+        return false;
+    }
+
+    $(document).on('pageinit', "#dlnaServerSettingsPage", function () {
+
+        $('.dlnaServerSettingsForm').off('submit', onSubmit).on('submit', onSubmit);
+
+    }).on('pageshow', "#dlnaServerSettingsPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -33,31 +59,5 @@
         });
 
     });
-
-    function onSubmit() {
-
-        Dashboard.showLoadingMsg();
-
-        var form = this;
-
-        ApiClient.getNamedConfiguration("dlna").done(function (config) {
-
-            config.EnableServer = $('#chkEnableServer', form).checked();
-            config.BlastAliveMessages = $('#chkBlastAliveMessages', form).checked();
-            config.BlastAliveMessageIntervalSeconds = $('#txtBlastInterval', form).val();
-            config.DefaultUserId = $('#selectUser', form).val();
-
-            config.EnableEnhancedMovies = $('#chkEnableEnhancedMovies', form).checked();
-
-            ApiClient.updateNamedConfiguration("dlna", config).done(Dashboard.processServerConfigurationUpdateResult);
-        });
-
-        // Disable default form submission
-        return false;
-    }
-
-    window.DlnaServerSettingsPage = {
-        onSubmit: onSubmit
-    };
 
 })(jQuery, document, window);

@@ -6,6 +6,8 @@ using System.IO;
 using System.Security;
 using System.Text;
 using System.Threading;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.LocalMetadata.Savers
 {
@@ -20,10 +22,14 @@ namespace MediaBrowser.LocalMetadata.Savers
         }
 
         private readonly IServerConfigurationManager _config;
+        private readonly ILibraryManager _libraryManager;
+        private readonly IFileSystem _fileSystem;
 
-        public GameSystemXmlSaver(IServerConfigurationManager config)
+        public GameSystemXmlSaver(IServerConfigurationManager config, ILibraryManager libraryManager, IFileSystem fileSystem)
         {
             _config = config;
+            _libraryManager = libraryManager;
+            _fileSystem = fileSystem;
         }
 
         /// <summary>
@@ -61,13 +67,13 @@ namespace MediaBrowser.LocalMetadata.Savers
                 builder.Append("<GameSystem>" + SecurityElement.Escape(gameSystem.GameSystemName) + "</GameSystem>");
             }
 
-            XmlSaverHelpers.AddCommonNodes(gameSystem, builder);
+            XmlSaverHelpers.AddCommonNodes(gameSystem, _libraryManager, builder);
 
             builder.Append("</Item>");
 
             var xmlFilePath = GetSavePath(item);
 
-            XmlSaverHelpers.Save(builder, xmlFilePath, new List<string> { }, _config);
+            XmlSaverHelpers.Save(builder, xmlFilePath, new List<string> { }, _config, _fileSystem);
         }
 
         /// <summary>

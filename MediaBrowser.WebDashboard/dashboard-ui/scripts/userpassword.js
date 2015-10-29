@@ -28,7 +28,12 @@
         });
     }
 
-    $(document).on('pagebeforeshow', "#userPasswordPage", function () {
+    $(document).on('pageinit', "#userPasswordPage", function () {
+
+        $('.adminUpdatePasswordForm').off('submit', UpdatePasswordPage.onSubmit).on('submit', UpdatePasswordPage.onSubmit);
+        $('.adminLocalAccessForm').off('submit', UpdatePasswordPage.onLocalAccessSubmit).on('submit', UpdatePasswordPage.onLocalAccessSubmit);
+
+    }).on('pagebeforeshow', "#userPasswordPage", function () {
 
         var page = this;
 

@@ -6,6 +6,13 @@
 
         self.show = function (options) {
 
+            require(['jqmpopup'], function () {
+                self.showInternal(options);
+            });
+        };
+
+        self.showInternal = function (options) {
+
             options = options || {};
 
             options.header = options.header || Globalize.translate('HeaderRateAndReview');
@@ -67,7 +74,7 @@
                     };
 
                     options.callback(review);
-                } else console.log("No callback function provided");
+                } else Logger.log("No callback function provided");
 
                 return false;
             });
@@ -91,7 +98,7 @@
                 id: id,
                 rating: rating,
                 callback: function (review) {
-                    console.log(review);
+                    Logger.log(review);
                     dialog.close();
 
                     ApiClient.createPackageReview(review).done(function () {
@@ -112,7 +119,7 @@
             for (var i = 1; i <= 5; i++) {
                 var title = noLinks ? rating + " stars" : "Rate " + i + (i > 1 ? " stars" : " star");
 
-                html += noLinks ? "" : "<span data-id=" + id + " data-name='" + name + "' data-rating=" + i + " onclick='RatingHelpers.ratePackage(this);return false;' >";
+                html += noLinks ? "" : "<a href='#' data-id=" + id + " data-name='" + name + "' data-rating=" + i + " onclick='RatingHelpers.ratePackage(this);return false;' >";
                 if (rating <= i - 1) {
                     html += "<div class='storeStarRating emptyStarRating' title='" + title + "'></div>";
                 } else if (rating < i) {
@@ -120,7 +127,7 @@
                 } else {
                     html += "<div class='storeStarRating' title='" + title + "'></div>";
                 }
-                html += noLinks ? "" : "</span>";
+                html += noLinks ? "" : "</a>";
             }
 
             html += "</div>";

@@ -125,9 +125,7 @@
 
         self.setVolume = function (vol) {
             sendCommandByName('SetVolume', {
-
                 Volume: vol
-
             });
         };
 
@@ -155,6 +153,13 @@
             });
         };
 
+        self.setRepeatMode = function (mode) {
+
+            sendCommandByName('SetRepeatMode', {
+                RepeatMode: mode
+            });
+        };
+
         self.displayContent = function (options) {
 
             sendCommandByName('DisplayContent', options);
@@ -164,7 +169,7 @@
 
             var deferred = $.Deferred();
 
-            var apiClient = ConnectionManager.currentApiClient();
+            var apiClient = window.ApiClient;
 
             if (apiClient) {
                 apiClient.getSessions().done(function (sessions) {
@@ -190,6 +195,19 @@
             return deferred.promise();
         };
 
+        var pollInterval;
+
+        function onPollIntervalFired() {
+
+            if (!ApiClient.isWebSocketOpen()) {
+                var apiClient = window.ApiClient;
+
+                if (apiClient) {
+                    apiClient.getSessions().done(processUpdatedSessions);
+                }
+            }
+        }
+
         self.subscribeToPlayerUpdates = function () {
 
             self.isUpdating = true;
@@ -198,15 +216,24 @@
 
                 ApiClient.sendWebSocketMessage("SessionsStart", "100,800");
             }
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+            pollInterval = setInterval(onPollIntervalFired, 1500);
         };
 
         function unsubscribeFromPlayerUpdates() {
 
-            self.false = true;
+            self.isUpdating = true;
 
             if (ApiClient.isWebSocketOpen()) {
 
                 ApiClient.sendWebSocketMessage("SessionsStop");
+            }
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
             }
         }
 
@@ -242,7 +269,7 @@
                 ControllableByUserId: Dashboard.getCurrentUserId()
             };
 
-            var apiClient = ConnectionManager.currentApiClient();
+            var apiClient = window.ApiClient;
 
             if (apiClient) {
                 apiClient.getSessions(sessionQuery).done(function (sessions) {
@@ -276,6 +303,13 @@
 
             return deferred.promise();
         };
+
+        self.tryPair = function(target) {
+
+            var deferred = $.Deferred();
+            deferred.resolve();
+            return deferred.promise();
+        };
     }
 
     var player = new remoteControlPlayer();
@@ -289,7 +323,7 @@
 
     function firePlaybackEvent(name, session) {
 
-        $(player).trigger(name, [getPlayerState(session)]);
+        Events.trigger(player, name, [getPlayerState(session)]);
     }
 
     function onWebSocketConnectionChange() {
@@ -300,27 +334,32 @@
         }
     }
 
+    function processUpdatedSessions(sessions) {
+        
+        var currentTargetId = MediaController.getPlayerInfo().id;
+
+        // Update existing data
+        //updateSessionInfo(popup, msg.Data);
+        var session = sessions.filter(function (s) {
+            return s.Id == currentTargetId;
+        })[0];
+
+        if (session) {
+            firePlaybackEvent('playstatechange', session);
+        }
+    }
+
     function onWebSocketMessageReceived(e, msg) {
 
         var apiClient = this;
 
         if (msg.MessageType === "Sessions") {
 
-            var currentTargetId = MediaController.getPlayerInfo().id;
-
-            // Update existing data
-            //updateSessionInfo(popup, msg.Data);
-            var session = msg.Data.filter(function (s) {
-                return s.Id == currentTargetId;
-            })[0];
-
-            if (session) {
-                firePlaybackEvent('playstatechange', session);
-            }
+            processUpdatedSessions(msg.Data);
         }
         else if (msg.MessageType === "SessionEnded") {
 
-            console.log("Server reports another session ended");
+            Logger.log("Server reports another session ended");
 
             if (MediaController.getPlayerInfo().id == msg.Data.Id) {
                 MediaController.setDefaultPlayerActive();
@@ -348,9 +387,15 @@
         $(apiClient).on("websocketmessage", onWebSocketMessageReceived).on("websocketopen", onWebSocketConnectionChange);
     }
 
-    $(ConnectionManager).on('apiclientcreated', function (e, apiClient) {
+    Dashboard.ready(function () {
 
-        initializeApiClient(apiClient);
+        if (window.ApiClient) {
+            initializeApiClient(window.ApiClient);
+        }
+
+        $(ConnectionManager).on('apiclientcreated', function (e, apiClient) {
+            initializeApiClient(apiClient);
+        });
     });
 
 })(window, document, jQuery);

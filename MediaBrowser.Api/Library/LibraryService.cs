@@ -1,14 +1,20 @@
-﻿using MediaBrowser.Controller.Activity;
+﻿using MediaBrowser.Api.Movies;
+using MediaBrowser.Api.Music;
+using MediaBrowser.Controller.Activity;
+using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Localization;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.TV;
 using MediaBrowser.Model.Activity;
+using MediaBrowser.Model.Channels;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
@@ -21,6 +27,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Api.Library
 {
@@ -77,7 +85,7 @@ namespace MediaBrowser.Api.Library
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         /// <summary>
         /// Gets or sets the id.
@@ -102,7 +110,7 @@ namespace MediaBrowser.Api.Library
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         /// <summary>
         /// Gets or sets the id.
@@ -127,7 +135,7 @@ namespace MediaBrowser.Api.Library
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         /// <summary>
         /// Gets or sets the id.
@@ -159,7 +167,7 @@ namespace MediaBrowser.Api.Library
     public class GetItemCounts : IReturn<ItemCounts>
     {
         [ApiMember(Name = "UserId", Description = "Optional. Get counts from a specific user's library.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         [ApiMember(Name = "IsFavorite", Description = "Optional. Get counts of favorite items", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
         public bool? IsFavorite { get; set; }
@@ -174,7 +182,7 @@ namespace MediaBrowser.Api.Library
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         /// <summary>
         /// Gets or sets the id.
@@ -193,7 +201,7 @@ namespace MediaBrowser.Api.Library
         /// </summary>
         /// <value>The user id.</value>
         [ApiMember(Name = "UserId", Description = "Optional. Filter by user id, and attach user data", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid? UserId { get; set; }
+        public string UserId { get; set; }
 
         [ApiMember(Name = "IncludeItemTypes", Description = "Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimeted.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
         public string IncludeItemTypes { get; set; }
@@ -225,6 +233,17 @@ namespace MediaBrowser.Api.Library
         public string TvdbId { get; set; }
     }
 
+    [Route("/Library/Movies/Added", "POST", Summary = "Reports that new movies have been added by an external source")]
+    [Route("/Library/Movies/Updated", "POST", Summary = "Reports that new movies have been added by an external source")]
+    [Authenticated]
+    public class PostUpdatedMovies : IReturnVoid
+    {
+        [ApiMember(Name = "TmdbId", Description = "Tmdb Id", IsRequired = false, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string TmdbId { get; set; }
+        [ApiMember(Name = "ImdbId", Description = "Imdb Id", IsRequired = false, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string ImdbId { get; set; }
+    }
+
     [Route("/Items/{Id}/Download", "GET", Summary = "Downloads item media")]
     [Authenticated(Roles = "download")]
     public class GetDownload
@@ -235,6 +254,12 @@ namespace MediaBrowser.Api.Library
         /// <value>The id.</value>
         [ApiMember(Name = "Id", Description = "Item Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
         public string Id { get; set; }
+    }
+
+    [Route("/Items/{Id}/Similar", "GET", Summary = "Gets similar items")]
+    [Authenticated]
+    public class GetSimilarItems : BaseGetSimilarItemsFromItem
+    {
     }
 
     /// <summary>
@@ -255,12 +280,17 @@ namespace MediaBrowser.Api.Library
         private readonly IAuthorizationContext _authContext;
         private readonly IActivityManager _activityManager;
         private readonly ILocalizationManager _localization;
+        private readonly ILiveTvManager _liveTv;
+        private readonly IChannelManager _channelManager;
+        private readonly ITVSeriesManager _tvManager;
+        private readonly ILibraryMonitor _libraryMonitor;
+        private readonly IFileSystem _fileSystem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LibraryService" /> class.
         /// </summary>
         public LibraryService(IItemRepository itemRepo, ILibraryManager libraryManager, IUserManager userManager,
-                              IDtoService dtoService, IUserDataManager userDataManager, IAuthorizationContext authContext, IActivityManager activityManager, ILocalizationManager localization)
+                              IDtoService dtoService, IUserDataManager userDataManager, IAuthorizationContext authContext, IActivityManager activityManager, ILocalizationManager localization, ILiveTvManager liveTv, IChannelManager channelManager, ITVSeriesManager tvManager, ILibraryMonitor libraryMonitor, IFileSystem fileSystem)
         {
             _itemRepo = itemRepo;
             _libraryManager = libraryManager;
@@ -270,6 +300,118 @@ namespace MediaBrowser.Api.Library
             _authContext = authContext;
             _activityManager = activityManager;
             _localization = localization;
+            _liveTv = liveTv;
+            _channelManager = channelManager;
+            _tvManager = tvManager;
+            _libraryMonitor = libraryMonitor;
+            _fileSystem = fileSystem;
+        }
+
+        public object Get(GetSimilarItems request)
+        {
+            var user = !string.IsNullOrWhiteSpace(request.UserId) ? _userManager.GetUserById(request.UserId) : null;
+
+            var item = string.IsNullOrEmpty(request.Id) ?
+                (!string.IsNullOrWhiteSpace(request.UserId) ? user.RootFolder :
+                _libraryManager.RootFolder) : _libraryManager.GetItemById(request.Id);
+
+            if (item is Game)
+            {
+                return new GamesService(_userManager, _userDataManager, _libraryManager, _itemRepo, _dtoService)
+                {
+                    AuthorizationContext = AuthorizationContext,
+                    Logger = Logger,
+                    Request = Request,
+                    SessionContext = SessionContext,
+                    ResultFactory = ResultFactory
+
+                }.Get(new GetSimilarGames
+                {
+                    Fields = request.Fields,
+                    Id = request.Id,
+                    Limit = request.Limit,
+                    UserId = request.UserId
+                });
+            }
+            if (item is MusicAlbum)
+            {
+                return new AlbumsService(_userManager, _userDataManager, _libraryManager, _itemRepo, _dtoService)
+                {
+                    AuthorizationContext = AuthorizationContext,
+                    Logger = Logger,
+                    Request = Request,
+                    SessionContext = SessionContext,
+                    ResultFactory = ResultFactory
+
+                }.Get(new GetSimilarAlbums
+                {
+                    Fields = request.Fields,
+                    Id = request.Id,
+                    Limit = request.Limit,
+                    UserId = request.UserId
+                });
+            }
+            if (item is MusicArtist)
+            {
+                return new AlbumsService(_userManager, _userDataManager, _libraryManager, _itemRepo, _dtoService)
+                {
+                    AuthorizationContext = AuthorizationContext,
+                    Logger = Logger,
+                    Request = Request,
+                    SessionContext = SessionContext,
+                    ResultFactory = ResultFactory
+
+                }.Get(new GetSimilarArtists
+                {
+                    Fields = request.Fields,
+                    Id = request.Id,
+                    Limit = request.Limit,
+                    UserId = request.UserId
+                });
+            }
+
+            var program = item as IHasProgramAttributes;
+            var channelItem = item as ChannelVideoItem;
+
+            if (item is Movie || (program != null && program.IsMovie) || (channelItem != null && channelItem.ContentType == ChannelMediaContentType.Movie) || (channelItem != null && channelItem.ContentType == ChannelMediaContentType.MovieExtra))
+            {
+                return new MoviesService(_userManager, _userDataManager, _libraryManager, _itemRepo, _dtoService, _channelManager)
+                {
+                    AuthorizationContext = AuthorizationContext,
+                    Logger = Logger,
+                    Request = Request,
+                    SessionContext = SessionContext,
+                    ResultFactory = ResultFactory
+
+                }.Get(new GetSimilarMovies
+                {
+                    Fields = request.Fields,
+                    Id = request.Id,
+                    Limit = request.Limit,
+                    UserId = request.UserId
+                });
+            }
+
+            if (item is Series || (program != null && program.IsSeries) || (channelItem != null && channelItem.ContentType == ChannelMediaContentType.Episode))
+            {
+                return new TvShowsService(_userManager, _userDataManager, _libraryManager, _itemRepo, _dtoService, _tvManager)
+                {
+                    AuthorizationContext = AuthorizationContext,
+                    Logger = Logger,
+                    Request = Request,
+                    SessionContext = SessionContext,
+                    ResultFactory = ResultFactory
+
+                }.Get(new GetSimilarShows
+                {
+                    Fields = request.Fields,
+                    Id = request.Id,
+                    Limit = request.Limit,
+                    UserId = request.UserId
+                });
+            }
+
+            return new ItemsResult();
         }
 
         public object Get(GetMediaFolders request)
@@ -297,7 +439,59 @@ namespace MediaBrowser.Api.Library
 
         public void Post(PostUpdatedSeries request)
         {
-            Task.Run(() => _libraryManager.ValidateMediaLibrary(new Progress<double>(), CancellationToken.None));
+            var series = _libraryManager.GetItems(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { typeof(Series).Name }
+
+            }).Items;
+
+            series = series.Where(i => string.Equals(request.TvdbId, i.GetProviderId(MetadataProviders.Tvdb), StringComparison.OrdinalIgnoreCase)).ToArray();
+
+            if (series.Length > 0)
+            {
+                foreach (var item in series)
+                {
+                    _libraryMonitor.ReportFileSystemChanged(item.Path);
+                }
+            }
+            else
+            {
+                Task.Run(() => _libraryManager.ValidateMediaLibrary(new Progress<double>(), CancellationToken.None));
+            }
+        }
+
+        public void Post(PostUpdatedMovies request)
+        {
+            var movies = _libraryManager.GetItems(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { typeof(Movie).Name }
+
+            }).Items;
+
+            if (!string.IsNullOrWhiteSpace(request.ImdbId))
+            {
+                movies = movies.Where(i => string.Equals(request.ImdbId, i.GetProviderId(MetadataProviders.Imdb), StringComparison.OrdinalIgnoreCase)).ToArray();
+            }
+            else if (!string.IsNullOrWhiteSpace(request.TmdbId))
+            {
+                movies = movies.Where(i => string.Equals(request.TmdbId, i.GetProviderId(MetadataProviders.Tmdb), StringComparison.OrdinalIgnoreCase)).ToArray();
+            }
+            else
+            {
+                movies = new BaseItem[] { };
+            }
+
+            if (movies.Length > 0)
+            {
+                foreach (var item in movies)
+                {
+                    _libraryMonitor.ReportFileSystemChanged(item.Path);
+                }
+            }
+            else
+            {
+                Task.Run(() => _libraryManager.ValidateMediaLibrary(new Progress<double>(), CancellationToken.None));
+            }
         }
 
         public object Get(GetDownload request)
@@ -367,7 +561,7 @@ namespace MediaBrowser.Api.Library
             {
                 throw new ArgumentException("This command cannot be used for remote or virtual items.");
             }
-            if (Directory.Exists(item.Path))
+			if (_fileSystem.DirectoryExists(item.Path))
             {
                 throw new ArgumentException("This command cannot be used for directories.");
             }
@@ -412,7 +606,7 @@ namespace MediaBrowser.Api.Library
 
             var baseItemDtos = new List<BaseItemDto>();
 
-            var user = request.UserId.HasValue ? _userManager.GetUserById(request.UserId.Value) : null;
+            var user = !string.IsNullOrWhiteSpace(request.UserId) ? _userManager.GetUserById(request.UserId) : null;
 
             var dtoOptions = GetDtoOptions(request);
 
@@ -483,15 +677,15 @@ namespace MediaBrowser.Api.Library
             return ToOptimizedSerializedResultUsingCache(counts);
         }
 
-        private bool FilterItem(BaseItem item, GetItemCounts request, Guid? userId)
+        private bool FilterItem(BaseItem item, GetItemCounts request, string userId)
         {
-            if (userId.HasValue)
+            if (!string.IsNullOrWhiteSpace(userId))
             {
                 if (request.IsFavorite.HasValue)
                 {
                     var val = request.IsFavorite.Value;
 
-                    if (_userDataManager.GetUserData(userId.Value, item.GetUserDataKey()).IsFavorite != val)
+                    if (_userDataManager.GetUserData(userId, item.GetUserDataKey()).IsFavorite != val)
                     {
                         return false;
                     }
@@ -524,18 +718,24 @@ namespace MediaBrowser.Api.Library
         public void Delete(DeleteItem request)
         {
             var item = _libraryManager.GetItemById(request.Id);
-
             var auth = _authContext.GetAuthorizationInfo(Request);
             var user = _userManager.GetUserById(auth.UserId);
 
             if (!item.CanDelete(user))
             {
-                throw new UnauthorizedAccessException();
+                throw new SecurityException("Unauthorized access");
             }
 
-            var task = _libraryManager.DeleteItem(item);
-
-            Task.WaitAll(task);
+            if (item is ILiveTvRecording)
+            {
+                var task = _liveTv.DeleteRecording(request.Id);
+                Task.WaitAll(task);
+            }
+            else
+            {
+                var task = _libraryManager.DeleteItem(item);
+                Task.WaitAll(task);
+            }
         }
 
         /// <summary>
@@ -609,44 +809,22 @@ namespace MediaBrowser.Api.Library
 
         private ThemeMediaResult GetThemeSongs(GetThemeSongs request)
         {
-            var user = request.UserId.HasValue ? _userManager.GetUserById(request.UserId.Value) : null;
+            var user = !string.IsNullOrWhiteSpace(request.UserId) ? _userManager.GetUserById(request.UserId) : null;
 
             var item = string.IsNullOrEmpty(request.Id)
-                           ? (request.UserId.HasValue
+                           ? (!string.IsNullOrWhiteSpace(request.UserId)
                                   ? user.RootFolder
                                   : (Folder)_libraryManager.RootFolder)
                            : _libraryManager.GetItemById(request.Id);
-
-            var originalItem = item;
 
             while (GetThemeSongIds(item).Count == 0 && request.InheritFromParent && item.Parent != null)
             {
                 item = item.Parent;
             }
 
-            var themeSongIds = GetThemeSongIds(item);
-
-            if (themeSongIds.Count == 0 && request.InheritFromParent)
-            {
-                var album = originalItem as MusicAlbum;
-
-                if (album != null)
-                {
-                    var linkedItemWithThemes = album.SoundtrackIds
-                        .Select(i => _libraryManager.GetItemById(i))
-                        .FirstOrDefault(i => GetThemeSongIds(i).Count > 0);
-
-                    if (linkedItemWithThemes != null)
-                    {
-                        themeSongIds = GetThemeSongIds(linkedItemWithThemes);
-                        item = linkedItemWithThemes;
-                    }
-                }
-            }
-
             var dtoOptions = GetDtoOptions(request);
 
-            var dtos = themeSongIds.Select(_libraryManager.GetItemById)
+            var dtos = GetThemeSongIds(item).Select(_libraryManager.GetItemById)
                             .OrderBy(i => i.SortName)
                             .Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user, item));
 
@@ -674,49 +852,22 @@ namespace MediaBrowser.Api.Library
 
         public ThemeMediaResult GetThemeVideos(GetThemeVideos request)
         {
-            var user = request.UserId.HasValue ? _userManager.GetUserById(request.UserId.Value) : null;
+            var user = !string.IsNullOrWhiteSpace(request.UserId) ? _userManager.GetUserById(request.UserId) : null;
 
             var item = string.IsNullOrEmpty(request.Id)
-                           ? (request.UserId.HasValue
+                           ? (!string.IsNullOrWhiteSpace(request.UserId)
                                   ? user.RootFolder
                                   : (Folder)_libraryManager.RootFolder)
                            : _libraryManager.GetItemById(request.Id);
-
-            var originalItem = item;
 
             while (GetThemeVideoIds(item).Count == 0 && request.InheritFromParent && item.Parent != null)
             {
                 item = item.Parent;
             }
 
-            var themeVideoIds = GetThemeVideoIds(item);
-
-            if (themeVideoIds.Count == 0 && request.InheritFromParent)
-            {
-                var album = originalItem as MusicAlbum;
-
-                if (album == null)
-                {
-                    album = originalItem.Parents.OfType<MusicAlbum>().FirstOrDefault();
-                }
-
-                if (album != null)
-                {
-                    var linkedItemWithThemes = album.SoundtrackIds
-                        .Select(i => _libraryManager.GetItemById(i))
-                        .FirstOrDefault(i => GetThemeVideoIds(i).Count > 0);
-
-                    if (linkedItemWithThemes != null)
-                    {
-                        themeVideoIds = GetThemeVideoIds(linkedItemWithThemes);
-                        item = linkedItemWithThemes;
-                    }
-                }
-            }
-
             var dtoOptions = GetDtoOptions(request);
 
-            var dtos = themeVideoIds.Select(_libraryManager.GetItemById)
+            var dtos = GetThemeVideoIds(item).Select(_libraryManager.GetItemById)
                             .OrderBy(i => i.SortName)
                             .Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user, item));
 

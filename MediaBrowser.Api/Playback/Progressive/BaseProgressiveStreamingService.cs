@@ -5,17 +5,19 @@ using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Dlna;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
+using MediaBrowser.Model.Serialization;
 using ServiceStack.Web;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Api.Playback.Progressive
 {
@@ -27,7 +29,7 @@ namespace MediaBrowser.Api.Playback.Progressive
         protected readonly IImageProcessor ImageProcessor;
         protected readonly IHttpClient HttpClient;
 
-        protected BaseProgressiveStreamingService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, IImageProcessor imageProcessor, IHttpClient httpClient) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient)
+        protected BaseProgressiveStreamingService(IServerConfigurationManager serverConfig, IUserManager userManager, ILibraryManager libraryManager, IIsoManager isoManager, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IDlnaManager dlnaManager, ISubtitleEncoder subtitleEncoder, IDeviceManager deviceManager, IMediaSourceManager mediaSourceManager, IZipClient zipClient, IJsonSerializer jsonSerializer, IImageProcessor imageProcessor, IHttpClient httpClient) : base(serverConfig, userManager, libraryManager, isoManager, mediaEncoder, fileSystem, dlnaManager, subtitleEncoder, deviceManager, mediaSourceManager, zipClient, jsonSerializer)
         {
             ImageProcessor = imageProcessor;
             HttpClient = httpClient;
@@ -138,7 +140,7 @@ namespace MediaBrowser.Api.Playback.Progressive
             }
 
             var outputPath = state.OutputFilePath;
-            var outputPathExists = File.Exists(outputPath);
+			var outputPathExists = FileSystem.FileExists(outputPath);
 
             var isTranscodeCached = outputPathExists && !ApiEntryPoint.Instance.HasActiveTranscodingJob(outputPath, TranscodingJobType.Progressive);
 
@@ -286,7 +288,9 @@ namespace MediaBrowser.Api.Playback.Progressive
 
             var contentType = state.GetMimeType(outputPath);
 
-            var contentLength = state.EstimateContentLength ? GetEstimatedContentLength(state) : null;
+            // TODO: The isHeadRequest is only here because ServiceStack will add Content-Length=0 to the response
+            // What we really want to do is hunt that down and remove that
+            var contentLength = state.EstimateContentLength || isHeadRequest ? GetEstimatedContentLength(state) : null;
 
             if (contentLength.HasValue)
             {
@@ -298,10 +302,14 @@ namespace MediaBrowser.Api.Playback.Progressive
             {
                 var streamResult = ResultFactory.GetResult(new byte[] { }, contentType, responseHeaders);
 
-                if (!contentLength.HasValue)
+                var hasOptions = streamResult as IHasOptions;
+                if (hasOptions != null)
                 {
-                    var hasOptions = streamResult as IHasOptions;
-                    if (hasOptions != null)
+                    if (contentLength.HasValue)
+                    {
+                        hasOptions.Options["Content-Length"] = contentLength.Value.ToString(CultureInfo.InvariantCulture);
+                    }
+                    else
                     {
                         if (hasOptions.Options.ContainsKey("Content-Length"))
                         {
@@ -318,7 +326,7 @@ namespace MediaBrowser.Api.Playback.Progressive
             {
                 TranscodingJob job;
 
-                if (!File.Exists(outputPath))
+				if (!FileSystem.FileExists(outputPath))
                 {
                     job = await StartFfMpeg(state, outputPath, cancellationTokenSource).ConfigureAwait(false);
                 }

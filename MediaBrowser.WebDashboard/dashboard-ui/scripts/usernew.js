@@ -106,32 +106,29 @@
             ApiClient.updateUserPolicy(user.Id, user.Policy).done(function () {
                 Dashboard.navigate("useredit.html?userId=" + user.Id);
             });
+
+        }).fail(function() {
+
+            Dashboard.showError(Globalize.translate('DefaultErrorMessage'));
+            Dashboard.hideLoadingMsg();
         });
     }
 
-    function newUserPage() {
+    function onSubmit() {
+        var page = $(this).parents('.page');
 
-        var self = this;
+        Dashboard.showLoadingMsg();
 
-        self.onSubmit = function () {
+        saveUser(page);
 
-            var page = $(this).parents('.page');
-
-            Dashboard.showLoadingMsg();
-
-            saveUser(page);
-
-            // Disable default form submission
-            return false;
-        };
+        // Disable default form submission
+        return false;
     }
 
     function loadData(page) {
 
         loadUser(page);
     }
-
-    window.NewUserPage = new newUserPage();
 
     $(document).on('pageinit', "#newUserPage", function () {
 
@@ -156,6 +153,8 @@
             }
 
         });
+
+        $('.newUserProfileForm').off('submit', onSubmit).on('submit', onSubmit);
 
     }).on('pageshow', "#newUserPage", function () {
 

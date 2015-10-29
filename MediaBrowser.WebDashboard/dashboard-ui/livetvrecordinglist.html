@@ -4,15 +4,8 @@
     <title>Emby</title>
 </head>
 <body>
-    <div id="liveTvRecordingListPage" data-role="page" class="page libraryPage liveTvPage" data-contextname="${HeaderLiveTv}">
-        <div class="libraryViewNav">
-            <a href="livetvsuggested.html">${TabSuggestions}</a>
-            <a href="livetvguide.html">${TabGuide}</a>
-            <a href="livetvchannels.html">${TabChannels}</a>
-            <a href="livetvrecordings.html" class="ui-btn-active">${TabRecordings}</a>
-            <a href="livetvtimers.html">${TabScheduled}</a>
-            <a href="livetvseriestimers.html">${TabSeries}</a>
-        </div>
+    <div id="liveTvRecordingListPage" data-role="page" class="page libraryPage liveTvPage noSecondaryNavPage" data-contextname="${HeaderLiveTv}" data-require="scripts/livetvrecordinglist,livetvcss" data-backbutton="true" data-menubutton="false">
+
         <div data-role="content">
             <div class="viewSettings" style="margin:.5em 0;">
 

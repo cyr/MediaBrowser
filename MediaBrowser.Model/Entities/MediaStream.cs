@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Runtime.Serialization;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Extensions;
 using System.Diagnostics;
@@ -17,6 +18,12 @@ namespace MediaBrowser.Model.Entities
         /// <value>The codec.</value>
         public string Codec { get; set; }
 
+        /// <summary>
+        /// Gets or sets the codec tag.
+        /// </summary>
+        /// <value>The codec tag.</value>
+        public string CodecTag { get; set; }
+        
         /// <summary>
         /// Gets or sets the language.
         /// </summary>
@@ -226,5 +233,8 @@ namespace MediaBrowser.Model.Entities
         /// </summary>
         /// <value><c>null</c> if [is cabac] contains no value, <c>true</c> if [is cabac]; otherwise, <c>false</c>.</value>
         public bool? IsCabac { get; set; }
+
+        [IgnoreDataMember]
+        public List<int> KeyFrames { get; set; }
     }
 }

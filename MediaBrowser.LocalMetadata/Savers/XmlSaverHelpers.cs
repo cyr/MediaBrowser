@@ -2,6 +2,7 @@
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Model.Entities;
@@ -13,6 +14,8 @@ using System.Linq;
 using System.Security;
 using System.Text;
 using System.Xml;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.LocalMetadata.Savers
 {
@@ -129,9 +132,9 @@ namespace MediaBrowser.LocalMetadata.Savers
         /// <param name="xml">The XML.</param>
         /// <param name="path">The path.</param>
         /// <param name="xmlTagsUsed">The XML tags used.</param>
-        public static void Save(StringBuilder xml, string path, List<string> xmlTagsUsed, IServerConfigurationManager config)
+        public static void Save(StringBuilder xml, string path, List<string> xmlTagsUsed, IServerConfigurationManager config, IFileSystem fileSystem)
         {
-            if (File.Exists(path))
+			if (fileSystem.FileExists(path))
             {
                 var position = xml.ToString().LastIndexOf("</", StringComparison.OrdinalIgnoreCase);
                 xml.Insert(position, GetCustomTags(path, xmlTagsUsed));
@@ -143,7 +146,7 @@ namespace MediaBrowser.LocalMetadata.Savers
             //Add the new node to the document.
             xmlDocument.InsertBefore(xmlDocument.CreateXmlDeclaration("1.0", "UTF-8", "yes"), xmlDocument.DocumentElement);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
+			fileSystem.CreateDirectory(Path.GetDirectoryName(path));
 
             var wasHidden = false;
 
@@ -230,7 +233,7 @@ namespace MediaBrowser.LocalMetadata.Savers
         /// </summary>
         /// <param name="item">The item.</param>
         /// <param name="builder">The builder.</param>
-        public static void AddCommonNodes(BaseItem item, StringBuilder builder)
+        public static void AddCommonNodes(BaseItem item, ILibraryManager libraryManager, StringBuilder builder)
         {
             if (!string.IsNullOrEmpty(item.OfficialRating))
             {
@@ -424,17 +427,13 @@ namespace MediaBrowser.LocalMetadata.Savers
                 }
             }
 
-            var hasLanguage = item as IHasPreferredMetadataLanguage;
-            if (hasLanguage != null)
+            if (!string.IsNullOrEmpty(item.PreferredMetadataLanguage))
             {
-                if (!string.IsNullOrEmpty(hasLanguage.PreferredMetadataLanguage))
-                {
-                    builder.Append("<Language>" + SecurityElement.Escape(hasLanguage.PreferredMetadataLanguage) + "</Language>");
-                }
-                if (!string.IsNullOrEmpty(hasLanguage.PreferredMetadataCountryCode))
-                {
-                    builder.Append("<CountryCode>" + SecurityElement.Escape(hasLanguage.PreferredMetadataCountryCode) + "</CountryCode>");
-                }
+                builder.Append("<Language>" + SecurityElement.Escape(item.PreferredMetadataLanguage) + "</Language>");
+            }
+            if (!string.IsNullOrEmpty(item.PreferredMetadataCountryCode))
+            {
+                builder.Append("<CountryCode>" + SecurityElement.Escape(item.PreferredMetadataCountryCode) + "</CountryCode>");
             }
 
             // Use original runtime here, actual file runtime later in MediaInfo
@@ -627,11 +626,13 @@ namespace MediaBrowser.LocalMetadata.Savers
                 }
             }
 
-            if (item.People.Count > 0)
+            var people = libraryManager.GetPeople(item);
+
+            if (people.Count > 0)
             {
                 builder.Append("<Persons>");
 
-                foreach (var person in item.People)
+                foreach (var person in people)
                 {
                     builder.Append("<Person>");
                     builder.Append("<Name>" + SecurityElement.Escape(person.Name) + "</Name>");

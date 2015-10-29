@@ -90,6 +90,12 @@
         $('.deviceAccess', page).show().html(html).trigger('create');
 
         $('#chkEnableAllDevices', page).checked(user.Policy.EnableAllDevices).checkboxradio('refresh').trigger('change');
+
+        if (user.Policy.IsAdministrator) {
+            page.querySelector('.deviceAccessContainer').classList.add('hide');
+        } else {
+            page.querySelector('.deviceAccessContainer').classList.remove('hide');
+        }
     }
 
     function loadUser(page, user, loggedInUser, mediaFolders, channels, devices) {
@@ -141,29 +147,29 @@
 
             }).get();
 
+        // Legacy
+        user.Policy.BlockedChannels = null;
+        user.Policy.BlockedMediaFolders = null;
+
         ApiClient.updateUserPolicy(user.Id, user.Policy).done(function () {
             onSaveComplete(page);
         });
     }
 
-    window.LibraryAccessPage = {
+    function onSubmit() {
+        var page = $(this).parents('.page');
 
-        onSubmit: function () {
+        Dashboard.showLoadingMsg();
 
-            var page = $(this).parents('.page');
+        var userId = getParameterByName("userId");
 
-            Dashboard.showLoadingMsg();
+        ApiClient.getUser(userId).done(function (result) {
+            saveUser(result, page);
+        });
 
-            var userId = getParameterByName("userId");
-
-            ApiClient.getUser(userId).done(function (result) {
-                saveUser(result, page);
-            });
-
-            // Disable default form submission
-            return false;
-        }
-    };
+        // Disable default form submission
+        return false;
+    }
 
     $(document).on('pageinit', "#userLibraryAccessPage", function () {
 
@@ -198,6 +204,8 @@
             }
 
         });
+
+        $('.userLibraryAccessForm').off('submit', onSubmit).on('submit', onSubmit);
 
     }).on('pageshow', "#userLibraryAccessPage", function () {
 

@@ -6,6 +6,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Library
 {
@@ -34,7 +35,7 @@ namespace MediaBrowser.Server.Implementations.Library
             // If the resolver didn't specify this
             if (parent != null)
             {
-                item.Parent = parent;
+                item.SetParent(parent);
             }
 
             item.Id = libraryManager.GetNewItemId(item.Path, item.GetType());
@@ -68,7 +69,7 @@ namespace MediaBrowser.Server.Implementations.Library
             // If the resolver didn't specify this
             if (args.Parent != null)
             {
-                item.Parent = args.Parent;
+                item.SetParent(args.Parent);
             }
 
             item.Id = libraryManager.GetNewItemId(item.Path, item.GetType());
@@ -88,7 +89,7 @@ namespace MediaBrowser.Server.Implementations.Library
         /// </summary>
         /// <param name="item">The item.</param>
         /// <param name="fileInfo">The file information.</param>
-        private static void EnsureName(BaseItem item, FileSystemInfo fileInfo)
+        private static void EnsureName(BaseItem item, FileSystemMetadata fileInfo)
         {
             // If the subclass didn't supply a name, add it here
             if (string.IsNullOrEmpty(item.Name) && !string.IsNullOrEmpty(item.Path))
@@ -179,7 +180,7 @@ namespace MediaBrowser.Server.Implementations.Library
             }
         }
 
-        private static void SetDateCreated(BaseItem item, IFileSystem fileSystem, FileSystemInfo info)
+        private static void SetDateCreated(BaseItem item, IFileSystem fileSystem, FileSystemMetadata info)
         {
             var config = BaseItem.ConfigurationManager.GetMetadataConfiguration();
 

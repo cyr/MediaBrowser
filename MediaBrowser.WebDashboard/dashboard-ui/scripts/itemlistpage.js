@@ -1,24 +1,50 @@
 ﻿(function ($, document) {
 
-    var view = "Poster";
-
-    // The base query options
-    var query = {
-
-        SortBy: "SortName",
-        SortOrder: "Ascending",
-        Fields: "DateCreated,PrimaryImageAspectRatio,MediaSourceCount,SyncInfo",
-        StartIndex: 0,
-        ImageTypeLimit: 1,
-        EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
-    };
-
     var currentItem;
+
+    var data = {};
+
+    function getPageData() {
+        var key = getSavedQueryKey();
+        var pageData = data[key];
+
+        if (!pageData) {
+            pageData = data[key] = {
+                query: {
+                    SortBy: "SortName",
+                    SortOrder: "Ascending",
+                    Fields: "DateCreated,PrimaryImageAspectRatio,MediaSourceCount,SyncInfo",
+                    ImageTypeLimit: 1,
+                    EnableImageTypes: "Primary,Backdrop,Banner,Thumb",
+                    StartIndex: 0,
+                    Limit: LibraryBrowser.getDefaultPageSize()
+                }
+            };
+
+            pageData.query.Filters = "";
+            pageData.query.NameStartsWithOrGreater = '';
+            pageData.view = LibraryBrowser.getSavedView(key) || LibraryBrowser.getDefaultItemsView('Poster', 'Poster');
+
+            pageData.query.ParentId = getParameterByName('parentId');
+            LibraryBrowser.loadSavedQueryValues(key, pageData.query);
+        }
+        return pageData;
+    }
+
+    function getQuery() {
+
+        return getPageData().query;
+    }
+    function getSavedQueryKey() {
+
+        return LibraryBrowser.getSavedQueryKey();
+    }
 
     function reloadItems(page) {
 
         Dashboard.showLoadingMsg();
 
+        var query = getQuery();
         var userId = Dashboard.getCurrentUserId();
 
         var parentItemPromise = query.ParentId ?
@@ -27,14 +53,16 @@
 
         var itemsPromise = ApiClient.getItems(userId, query);
 
-        $.when(parentItemPromise, itemsPromise).done(function(r1, r2) {
+        $.when(parentItemPromise, itemsPromise).done(function (r1, r2) {
 
             var item = r1[0];
             currentItem = item;
             var result = r2[0];
 
             // Scroll back up so they can see the results from the beginning
-            $(document).scrollTop(0);
+            window.scrollTo(0, 0);
+
+            var view = getPageData().view;
 
             var html = '';
             var pagingHtml = LibraryBrowser.getQueryPagingHtml({
@@ -42,47 +70,55 @@
                 limit: query.Limit,
                 totalRecordCount: result.TotalRecordCount,
                 viewButton: true,
-                showLimit: false
+                showLimit: false,
+                addLayoutButton: true,
+                currentLayout: view,
+                viewIcon: 'filter-list',
+                sortButton: true,
+                layouts: 'Poster,PosterCard'
             });
 
-            $('.listTopPaging', page).html(pagingHtml).trigger('create');
+            page.querySelector('.listTopPaging').innerHTML = pagingHtml;
 
             updateFilterControls(page);
 
             var context = getParameterByName('context');
 
-            if (context == 'home') {
-                context = 'folders';
-            }
-
-            var defaultAction = currentItem.Type == 'PhotoAlbum' ? 'photoslideshow' : null;
+            var posterOptions = {
+                items: result.Items,
+                shape: "auto",
+                centerText: true,
+                lazy: true
+            };
 
             if (view == "Backdrop") {
 
-                html = LibraryBrowser.getPosterViewHtml({
-                    items: result.Items,
-                    shape: "backdrop",
-                    showTitle: true,
-                    centerText: true,
-                    preferBackdrop: true,
-                    context: context,
-                    defaultAction: defaultAction
-                });
+                posterOptions.shape = 'backdrop';
+                posterOptions.showTitle = true;
+                posterOptions.preferBackdrop = true;
+
+                html = LibraryBrowser.getPosterViewHtml(posterOptions);
             }
             else if (view == "Poster") {
-                html = LibraryBrowser.getPosterViewHtml({
-                    items: result.Items,
-                    shape: "auto",
-                    showTitle: true,
-                    centerText: true,
-                    context: context,
-                    defaultAction: defaultAction
-                });
+
+                posterOptions.showTitle = context == 'photos' ? 'auto' : true;
+                posterOptions.overlayText = context == 'photos';
+
+                html = LibraryBrowser.getPosterViewHtml(posterOptions);
+            }
+            else if (view == "PosterCard") {
+
+                posterOptions.showTitle = true;
+                posterOptions.showYear = true;
+                posterOptions.cardLayout = true;
+                posterOptions.centerText = false;
+
+                html = LibraryBrowser.getPosterViewHtml(posterOptions);
             }
 
-            var elem = $('#items', page).html(html).lazyChildren();
-
-            $(pagingHtml).appendTo(elem).trigger('create');
+            var elem = page.querySelector('#items');
+            elem.innerHTML = html + pagingHtml;
+            ImageLoader.lazyChildren(elem);
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
@@ -92,6 +128,58 @@
             $('.btnPreviousPage', page).on('click', function () {
                 query.StartIndex -= query.Limit;
                 reloadItems(page);
+            });
+
+            $('.btnChangeLayout', page).on('layoutchange', function (e, layout) {
+                getPageData().view = layout;
+                LibraryBrowser.saveViewSetting(getSavedQueryKey(), layout);
+                reloadItems(page);
+            });
+
+            // On callback make sure to set StartIndex = 0
+            $('.btnSort', page).on('click', function () {
+                LibraryBrowser.showSortMenu({
+                    items: [{
+                        name: Globalize.translate('OptionNameSort'),
+                        id: 'SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionCommunityRating'),
+                        id: 'CommunityRating,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionCriticRating'),
+                        id: 'CriticRating,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionDateAdded'),
+                        id: 'DateCreated,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionDatePlayed'),
+                        id: 'DatePlayed,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionParentalRating'),
+                        id: 'OfficialRating,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionPlayCount'),
+                        id: 'PlayCount,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionReleaseDate'),
+                        id: 'PremiereDate,SortName'
+                    },
+                    {
+                        name: Globalize.translate('OptionRuntime'),
+                        id: 'Runtime,SortName'
+                    }],
+                    callback: function () {
+                        reloadItems(page);
+                    },
+                    query: query
+                });
             });
 
             LibraryBrowser.saveQueryValues(getParameterByName('parentId'), query);
@@ -105,43 +193,21 @@
                 name = item.ParentIndexNumber + "." + name;
             }
 
-            $('#itemName', page).html(name);
-
-            Dashboard.setPageTitle(name);
+            LibraryMenu.setTitle(name);
 
             $(page).trigger('displayingitem', [{
 
                 item: item
             }]);
 
+            LibraryBrowser.setLastRefreshed(page);
             Dashboard.hideLoadingMsg();
-        });
-
-        Dashboard.getCurrentUser().done(function (user) {
-
-            if (user.Policy.IsAdministrator && query.ParentId) {
-                $('#editButtonContainer', page).show();
-            } else {
-                $('#editButtonContainer', page).hide();
-            }
-
         });
     }
 
     function updateFilterControls(page) {
 
-        // Reset form values using the last used query
-        $('.radioSortBy', page).each(function () {
-
-            this.checked = (query.SortBy || '').toLowerCase() == this.getAttribute('data-sortby').toLowerCase();
-
-        }).checkboxradio('refresh');
-
-        $('.radioSortOrder', page).each(function () {
-
-            this.checked = (query.SortOrder || '').toLowerCase() == this.getAttribute('data-sortorder').toLowerCase();
-
-        }).checkboxradio('refresh');
+        var query = getQuery();
 
         $('.chkStandardFilter', page).each(function () {
 
@@ -150,76 +216,32 @@
 
             this.checked = filters.indexOf(',' + filterName) != -1;
 
-        }).checkboxradio('refresh');
-
-        $('#selectView', page).val(view).selectmenu('refresh');
+        });
 
         $('.alphabetPicker', page).alphaValue(query.NameStartsWithOrGreater);
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
     }
 
-    function startSlideshow(page, index) {
+    function onListItemClick(e) {
 
-        index += (query.StartIndex || 0);
+        var query = getQuery();
+        var page = $(this).parents('.page');
+        var info = LibraryBrowser.getListItemInfo(this);
 
-        var userId = Dashboard.getCurrentUserId();
-
-        var localQuery = $.extend({}, query);
-        localQuery.StartIndex = 0;
-        localQuery.Limit = null;
-        localQuery.MediaTypes = "Photo";
-        localQuery.Recursive = true;
-        localQuery.Filters = "IsNotFolder";
-
-        ApiClient.getItems(userId, localQuery).done(function(result) {
-
-            showSlideshow(page, result.Items, index);
-        });
-    }
-
-    function showSlideshow(page, items, index) {
-
-        var slideshowItems = items.map(function (item) {
-
-            var imgUrl = ApiClient.getScaledImageUrl(item.Id, {
-                
-                tag: item.ImageTags.Primary,
-                type: 'Primary'
-
+        if (info.mediaType == 'Photo') {
+            require(['scripts/photos'], function () {
+                Photos.startSlideshow(page, query, info.id);
             });
-
-            return {
-                title: item.Name,
-                href: imgUrl
-            };
-        });
-
-        index = Math.max(index || 0, 0);
-
-        $.swipebox(slideshowItems, {
-            initialIndexOnArray: index,
-            hideBarsDelay: 30000
-        });
+            return false;
+        }
     }
 
     $(document).on('pageinit', "#itemListPage", function () {
 
         var page = this;
 
-        $('.radioSortBy', this).on('click', function () {
-            query.StartIndex = 0;
-            query.SortBy = this.getAttribute('data-sortby');
-            reloadItems(page);
-        });
-
-        $('.radioSortOrder', this).on('click', function () {
-            query.StartIndex = 0;
-            query.SortOrder = this.getAttribute('data-sortorder');
-            reloadItems(page);
-        });
-
         $('.chkStandardFilter', this).on('change', function () {
 
+            var query = getQuery();
             var filterName = this.getAttribute('data-filter');
             var filters = query.Filters || "";
 
@@ -235,22 +257,9 @@
             reloadItems(page);
         });
 
-        $('#selectView', this).on('change', function () {
-
-            view = this.value;
-
-            reloadItems(page);
-
-            LibraryBrowser.saveViewSetting(getParameterByName('parentId'), view);
-        });
-
-        $('#btnEdit', page).on('click', function () {
-
-            Dashboard.navigate("edititemmetadata.html?id=" + currentItem.Id);
-        });
-
         $('.alphabetPicker', this).on('alphaselect', function (e, character) {
 
+            var query = getQuery();
             query.NameStartsWithOrGreater = character;
             query.StartIndex = 0;
 
@@ -258,48 +267,23 @@
 
         }).on('alphaclear', function (e) {
 
+            var query = getQuery();
             query.NameStartsWithOrGreater = '';
 
             reloadItems(page);
         });
 
-        $('#selectPageSize', page).on('change', function () {
-            query.Limit = parseInt(this.value);
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
+        $(page).on('click', '.mediaItem', onListItemClick);
 
-        $('.itemsContainer', page).on('photoslideshow', function (e, index) {
-            startSlideshow(page, index);
-        });
-
-    }).on('pageshow', "#itemListPage", function () {
+    }).on('pagebeforeshow', "#itemListPage", function () {
 
         var page = this;
 
-        query.Limit = LibraryBrowser.getDefaultPageSize();
-        query.ParentId = getParameterByName('parentId');
-        query.Filters = "";
-        query.SortBy = "SortName";
-        query.SortOrder = "Ascending";
-        query.StartIndex = 0;
-        query.NameStartsWithOrGreater = '';
-
-        var key = getParameterByName('parentId');
-        LibraryBrowser.loadSavedQueryValues(key, query);
-
-        LibraryBrowser.getSavedViewSetting(key).done(function (val) {
-
-            if (val) {
-                $('#selectView', page).val(val).selectmenu('refresh').trigger('change');
-            } else {
-                reloadItems(page);
-            }
-        });
-
+        reloadItems(page);
         updateFilterControls(page);
+        LibraryMenu.setBackButtonVisible(getParameterByName('context'));
 
-    }).on('pagehide', "#itemListPage", function () {
+    }).on('pagebeforehide', "#itemListPage", function () {
 
         currentItem = null;
 

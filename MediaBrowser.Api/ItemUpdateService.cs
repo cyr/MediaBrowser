@@ -211,12 +211,12 @@ namespace MediaBrowser.Api
 
             UpdateItem(request, item);
 
-            if (isLockedChanged && item.IsLocked)
-            {
-                item.IsUnidentified = false;
-            }
-
             await item.UpdateToRepository(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+
+            if (request.People != null)
+            {
+                await _libraryManager.UpdatePeople(item, request.People.Select(x => new PersonInfo { Name = x.Name, Role = x.Role, Type = x.Type }).ToList());
+            }
 
             if (isLockedChanged && item.IsFolder)
             {
@@ -303,11 +303,6 @@ namespace MediaBrowser.Api
                 item.Studios = request.Studios.Select(x => x.Name).ToList();
             }
 
-            if (request.People != null)
-            {
-                item.People = request.People.Select(x => new PersonInfo { Name = x.Name, Role = x.Role, Type = x.Type }).ToList();
-            }
-
             if (request.DateCreated.HasValue)
             {
                 item.DateCreated = NormalizeDateTime(request.DateCreated.Value);
@@ -321,13 +316,8 @@ namespace MediaBrowser.Api
 
             SetProductionLocations(item, request);
 
-            var hasLang = item as IHasPreferredMetadataLanguage;
-
-            if (hasLang != null)
-            {
-                hasLang.PreferredMetadataCountryCode = request.PreferredMetadataCountryCode;
-                hasLang.PreferredMetadataLanguage = request.PreferredMetadataLanguage;
-            }
+            item.PreferredMetadataCountryCode = request.PreferredMetadataCountryCode;
+            item.PreferredMetadataLanguage = request.PreferredMetadataLanguage;
 
             var hasDisplayOrder = item as IHasDisplayOrder;
             if (hasDisplayOrder != null)
@@ -389,22 +379,28 @@ namespace MediaBrowser.Api
                 game.PlayersSupported = request.Players;
             }
 
-            var hasAlbumArtists = item as IHasAlbumArtist;
-            if (hasAlbumArtists != null)
+            if (request.AlbumArtists != null)
             {
-                hasAlbumArtists.AlbumArtists = request
-                    .AlbumArtists
-                    .Select(i => i.Name)
-                    .ToList();
+                var hasAlbumArtists = item as IHasAlbumArtist;
+                if (hasAlbumArtists != null)
+                {
+                    hasAlbumArtists.AlbumArtists = request
+                        .AlbumArtists
+                        .Select(i => i.Name)
+                        .ToList();
+                }
             }
 
-            var hasArtists = item as IHasArtist;
-            if (hasArtists != null)
+            if (request.ArtistItems != null)
             {
-                hasArtists.Artists = request
-                    .ArtistItems
-                    .Select(i => i.Name)
-                    .ToList();
+                var hasArtists = item as IHasArtist;
+                if (hasArtists != null)
+                {
+                    hasArtists.Artists = request
+                        .ArtistItems
+                        .Select(i => i.Name)
+                        .ToList();
+                }
             }
 
             var song = item as Audio;
@@ -422,7 +418,7 @@ namespace MediaBrowser.Api
             var series = item as Series;
             if (series != null)
             {
-                series.Status = request.Status;
+                series.Status = request.SeriesStatus;
                 series.AirDays = request.AirDays;
                 series.AirTime = request.AirTime;
 
